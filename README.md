@@ -30,11 +30,23 @@ Open `http://localhost:8080` — on a phone, add the device's LAN address instea
 | Crouch / prone buttons | C / Z | Stances |
 | Bag icon | Tab or I | Tetris inventory |
 | ⇄ icon | X | Swap hands ↔ shoulder weapon |
+| 👁 icon | V | Toggle first / third person |
 | TAKE prompt | F | Pick up nearby item |
+
+## Dev mode
+
+Tap the **INVENTORY title 5 times quickly** (or open the game with `?dev=1`) to toggle dev mode.
+The panel offers **god mode, ×3 speed, infinite stamina, time-of-day slider / pause, post-FX toggle**,
+and a **spawn list of every registered item**. The red button at the bottom of the panel (or another
+5 taps on the title) disables it.
 
 ## Features
 
-**Tetris inventory** — DayZ-style grid storage. Every equipped clothing piece (top, pants, vest, belt) contributes its own pocket grid. Items occupy `w×h` cells, can be **rotated while dragging**, dragged between containers, equipped by dropping on equipment slots, and dropped to the ground (vicinity panel shows nearby loot). Tap an item for context actions (eat / drink / use / equip / drop).
+**Tetris inventory** — DayZ-style grid storage. Every equipped clothing piece (top, pants, vest, belt, backpack) contributes its own pocket grid. Items occupy `w×h` cells, can be **rotated while dragging**, dragged between containers, equipped by dropping on equipment slots, and dropped to the ground. The **vicinity panel** shows nearby loot, and ground containers (backpacks, vests, clothes with pockets) **expose their own grids in place** — loot them or stash into them without picking them up. Tap an item for context actions (eat / drink / use / equip / drop).
+
+**Camera** — third person or first person (with weapon viewmodel and scope support), toggle any time.
+
+**Day/night cycle** — 20-minute full day with dawn/dusk palettes, sun & moon, and darkness that actually matters: zombies see about half as far at night. Post-processing (half-res bloom + light-shaft god rays, ACES tone mapping) is tuned for mobile and auto-disables if the device can't hold frame rate.
 
 **Weapons** — AKM, M4A1, VS98 sniper (scoped), Remington 870 pump, Vaiga semi-auto shotgun, MP5-K, plus Machete, Cleaver, Kitchen Knife, Combat Knife and bare fists. Real magazine/ammo economy (5 ammo types found as stacks), fire modes, spread affected by stance/movement/aiming, recoil, tracers, muzzle flash, headshot multipliers. Gunshots aggro zombies by noise radius.
 

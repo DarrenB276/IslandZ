@@ -31,6 +31,9 @@
   <div id="top-bar">
     <div id="status-icons"></div>
     <div class="top-right">
+      <button class="hud-btn small" id="btn-view" title="First / third person">
+        <svg viewBox="0 0 24 24"><path d="M12 5c-5 0-9 4.5-10 7 1 2.5 5 7 10 7s9-4.5 10-7c-1-2.5-5-7-10-7zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-2A2.5 2.5 0 1 0 12 9.5a2.5 2.5 0 0 0 0 5z"/></svg>
+      </button>
       <button class="hud-btn small" id="btn-swap" title="Swap weapon">
         <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3 1.5-1.5L21 9l-5.5 5.5L14 13l3-3H4V8zm16 8H7l3 3-1.5 1.5L3 15l5.5-5.5L10 11l-3 3h13v2z"/></svg>
       </button>
@@ -112,6 +115,18 @@
   <div id="drag-ghost"></div>
   <button id="btn-rotate">⟳ ROTATE</button>
   <div id="action-sheet"></div>
+</div>
+
+<!-- ============ DEV MODE ============ -->
+<div id="dev-badge">DEV</div>
+<div id="dev-panel">
+  <div id="dev-header"><span>DEV MODE</span><button id="dev-close">✕</button></div>
+  <div id="dev-toggles"></div>
+  <div class="dev-section">TIME OF DAY <span id="dev-time-label"></span></div>
+  <input type="range" id="dev-time" min="0" max="24" step="0.25">
+  <div class="dev-section">SPAWN ITEM</div>
+  <div id="dev-items"></div>
+  <button id="dev-disable">DISABLE DEV MODE</button>
 </div>
 
 <!-- ============ DEATH SCREEN ============ -->

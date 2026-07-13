@@ -42,6 +42,7 @@ export function createHumanoid(opts = {}) {
   vestMesh.visible = false;
   hips.add(vestMesh);
 
+  // NOTE: the model's visual front is -Z (matches movement math and three.js convention)
   const headG = new THREE.Group();
   headG.position.y = 0.58;
   hips.add(headG);
@@ -51,11 +52,18 @@ export function createHumanoid(opts = {}) {
   const hairMesh = box(0.26, 0.09, 0.26, hair);
   hairMesh.position.y = 0.28;
   headG.add(hairMesh);
+  // eyes on the front face
+  const eyeMat = new THREE.MeshLambertMaterial({ color: opts.eye ?? 0x1c1c22 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.045, 0.015), eyeMat);
+    eye.position.set(side * 0.06, 0.17, -0.125);
+    headG.add(eye);
+  }
 
   // headgear variants
   const hatCap = new THREE.Group();
   { const b = box(0.27, 0.08, 0.27, 0xffffff); b.position.y = 0.3; hatCap.add(b);
-    const brim = box(0.2, 0.03, 0.16, 0xffffff); brim.position.set(0, 0.27, 0.2); hatCap.add(brim); }
+    const brim = box(0.2, 0.03, 0.16, 0xffffff); brim.position.set(0, 0.27, -0.2); hatCap.add(brim); }
   const hatBoonie = new THREE.Group();
   { const b = box(0.24, 0.1, 0.24, 0xffffff); b.position.y = 0.31; hatBoonie.add(b);
     const brim = box(0.36, 0.025, 0.36, 0xffffff); brim.position.y = 0.27; hatBoonie.add(brim); }
@@ -63,12 +71,18 @@ export function createHumanoid(opts = {}) {
   { const b = box(0.3, 0.16, 0.3, 0xffffff); b.position.y = 0.28; hatHelmet.add(b); }
   const hatMoto = new THREE.Group();
   { const b = box(0.3, 0.28, 0.3, 0xffffff); b.position.y = 0.18; hatMoto.add(b);
-    const visor = box(0.24, 0.08, 0.02, 0x88aabb); visor.position.set(0, 0.2, 0.16); hatMoto.add(visor); }
+    const visor = box(0.24, 0.08, 0.02, 0x88aabb); visor.position.set(0, 0.2, -0.16); hatMoto.add(visor); }
   const maskMesh = box(0.2, 0.12, 0.05, 0xffffff);
-  maskMesh.position.set(0, 0.1, 0.135);
+  maskMesh.position.set(0, 0.1, -0.135);
   headG.add(maskMesh);
   maskMesh.visible = false;
   for (const h of [hatCap, hatBoonie, hatHelmet, hatMoto]) { h.visible = false; headG.add(h); }
+
+  // backpack sits on the back (+Z)
+  const backpackMesh = box(0.36, 0.42, 0.18, 0x6a5a40);
+  backpackMesh.position.set(0, 0.28, 0.22);
+  backpackMesh.visible = false;
+  hips.add(backpackMesh);
 
   // arms — pivot at shoulder
   const armL = limb(0.13, 0.52, 0.13, shirt);
@@ -95,11 +109,17 @@ export function createHumanoid(opts = {}) {
 
   const rig = {
     group: root, body, hips, torso, headG, head, armL, armR, legL, legR, weaponMount,
-    vestMesh, maskMesh, hats: { cap: hatCap, boonie: hatBoonie, helmet: hatHelmet, moto: hatMoto },
+    vestMesh, maskMesh, backpackMesh,
+    hats: { cap: hatCap, boonie: hatBoonie, helmet: hatHelmet, moto: hatMoto },
     hairMesh, handL, handR,
     phase: Math.random() * 10, weaponMesh: null, meleePose: false, gunPose: false,
   };
   return rig;
+}
+
+export function setBackpack(rig, def) {
+  rig.backpackMesh.visible = !!def;
+  if (def) rig.backpackMesh.material.color.setHex(def.color ?? 0x6a5a40);
 }
 
 export function setClothingColors(rig, { top, pants, gloves }) {
@@ -217,6 +237,8 @@ export function createWeaponMesh(id) {
 }
 
 // ================= procedural animation =================
+// Model faces -Z. Positive limb rotation.x swings the limb FORWARD (toward -Z);
+// forward torso lean / prone tilt are NEGATIVE rotations about X.
 // params: { stance:'stand'|'crouch'|'prone', speed (m/s), aiming, attackT (0..1 melee swing),
 //           jumping, climbing (0..1), zombie, dead, deadT }
 const L = THREE.MathUtils.lerp;
@@ -229,10 +251,10 @@ export function animateHumanoid(rig, dt, p) {
   const s = (x) => Math.sin(x);
 
   // targets
-  let hipY = 0.92, bodyRotX = 0, torsoLean = 0;
+  let hipY = 0.92, bodyRotX = 0, torsoLean = 0; // torsoLean > 0 = lean forward
   let armLX = 0, armRX = 0, armLZ = 0.06, armRZ = -0.06;
   let legLX = 0, legRX = 0;
-  let headX = 0;
+  let headX = 0; // > 0 tilts face upward
 
   if (p.dead) {
     const k = Math.min(1, (p.deadT ?? 1) * 2.2);
@@ -244,32 +266,32 @@ export function animateHumanoid(rig, dt, p) {
   const swing = moving ? Math.min(1, speed / 2.2) * (0.5 + Math.min(1, speed / 5) * 0.55) : 0;
 
   if (p.climbing != null && p.climbing >= 0) {
-    // climbing a ledge: arms up, legs push
+    // climbing a ledge: arms reach forward/up, legs push
     const c = p.climbing;
-    armLX = -2.4 + s(c * 10) * 0.3;
-    armRX = -2.4 - s(c * 10) * 0.3;
-    legLX = -0.9 + s(c * 12) * 0.5;
-    legRX = -0.9 - s(c * 12) * 0.5;
+    armLX = 2.4 + s(c * 10) * 0.3;
+    armRX = 2.4 - s(c * 10) * 0.3;
+    legLX = 0.9 + s(c * 12) * 0.5;
+    legRX = 0.9 - s(c * 12) * 0.5;
     bodyRotX = -0.25;
   } else if (p.stance === 'prone') {
-    bodyRotX = -Math.PI / 2 * 0.94;
+    bodyRotX = -Math.PI / 2 * 0.94; // chest down, head toward -Z
     hipY = 0.34;
     if (moving) {
-      armLX = -2.6 + s(t) * 0.6;
-      armRX = -2.6 - s(t) * 0.6;
+      armLX = 2.6 + s(t) * 0.6;
+      armRX = 2.6 - s(t) * 0.6;
       legLX = s(t) * 0.45;
       legRX = -s(t) * 0.45;
     } else {
-      armLX = -2.5; armRX = -2.5;
+      armLX = 2.5; armRX = 2.5;
     }
-    headX = -1.1; // look forward while prone
+    headX = 1.15; // raise head to look forward while lying down
   } else {
     const crouch = p.stance === 'crouch';
     hipY = crouch ? 0.62 : 0.92;
     torsoLean = crouch ? 0.42 : (speed > 4 ? 0.22 : speed > 2 ? 0.1 : 0);
     if (p.jumping) {
-      legLX = -0.7; legRX = 0.35;
-      armLX = -0.5; armRX = -0.5;
+      legLX = 0.7; legRX = -0.35;
+      armLX = 0.5; armRX = 0.5;
     } else if (moving) {
       legLX = s(t) * swing;
       legRX = -s(t) * swing;
@@ -281,16 +303,16 @@ export function animateHumanoid(rig, dt, p) {
       armRX = -s(t * 0.5) * 0.04;
       torsoLean += s(t * 0.5) * 0.015;
     }
-    if (crouch) { legLX -= 0.9; legRX -= 0.9; }
+    if (crouch) { legLX += 0.9; legRX += 0.9; } // knees forward
   }
 
-  // zombie posture: hunched, arms dangle or reach
+  // zombie posture: hunched forward, arms dangle or reach
   if (p.zombie) {
     torsoLean += 0.35;
     headX += 0.15 + s(t * 0.7) * 0.08;
     if (p.aggro) {
-      armLX = -1.9 + s(t) * 0.35;
-      armRX = -1.9 - s(t) * 0.35;
+      armLX = 1.9 + s(t) * 0.35;
+      armRX = 1.9 - s(t) * 0.35;
       armLZ = 0.25; armRZ = -0.25;
     } else if (!moving) {
       armLX = 0.2 + s(t * 0.4) * 0.1;
@@ -299,8 +321,8 @@ export function animateHumanoid(rig, dt, p) {
     if (p.attackT != null) {
       const a = p.attackT;
       const reach = a < 0.4 ? a / 0.4 : 1 - (a - 0.4) / 0.6;
-      armLX = -1.2 - reach * 1.2;
-      armRX = -1.2 - reach * 1.2;
+      armLX = 1.2 + reach * 1.2;
+      armRX = 1.2 + reach * 1.2;
       torsoLean += reach * 0.3;
     }
   }
@@ -308,23 +330,23 @@ export function animateHumanoid(rig, dt, p) {
   // weapon poses override arms
   if (rig.gunPose && !p.zombie && p.stance !== 'prone' && p.climbing == null) {
     if (p.aiming) {
-      armRX = -1.5; armRZ = -0.12;
-      armLX = -1.35; armLZ = 0.5;
+      armRX = 1.5; armRZ = -0.12;
+      armLX = 1.35; armLZ = 0.5;
     } else {
-      armRX = -0.9; armRZ = -0.1;
-      armLX = -0.75; armLZ = 0.45;
-      if (moving && speed > 4) { armRX = -0.5; armLX = -0.4; } // lower gun while sprinting
+      armRX = 0.9; armRZ = -0.1;
+      armLX = 0.75; armLZ = 0.45;
+      if (moving && speed > 4) { armRX = 0.5; armLX = 0.4; } // lower gun while sprinting
     }
   } else if (rig.gunPose && p.stance === 'prone') {
-    armRX = -2.55; armLX = -2.45; armLZ = 0.3;
+    armRX = 2.55; armLX = 2.45; armLZ = 0.3;
   }
   if (rig.meleePose && !p.zombie) {
-    armRX = Math.min(armRX, -0.35);
+    armRX = Math.max(armRX, 0.35);
     if (p.attackT != null) {
       const a = p.attackT;
       const wind = a < 0.3 ? a / 0.3 : 0;
       const strike = a >= 0.3 ? (a - 0.3) / 0.7 : 0;
-      armRX = -0.4 - wind * 1.6 + strike * 2.2;
+      armRX = 0.4 + wind * 1.6 - strike * 2.2; // wind up overhead, chop down/forward
       armRZ = -0.15 - strike * 0.2;
       torsoLean += strike * 0.25;
     }
@@ -332,16 +354,16 @@ export function animateHumanoid(rig, dt, p) {
     // fists
     const a = p.attackT;
     const punch = a < 0.5 ? a / 0.5 : 1 - (a - 0.5) / 0.5;
-    armRX = -0.3 - punch * 1.4;
+    armRX = 0.3 + punch * 1.4;
   }
 
-  // apply with smoothing
+  // apply with smoothing (lean forward = negative X rotation)
   const k = Math.min(1, dt * 14);
   rig.hips.position.y = L(rig.hips.position.y, hipY, k);
   rig.body.rotation.x = L(rig.body.rotation.x, bodyRotX, k);
-  rig.torso.rotation.x = L(rig.torso.rotation.x, torsoLean * 0.4, k);
-  rig.hips.rotation.x = L(rig.hips.rotation.x, torsoLean * 0.5, k);
-  rig.headG.rotation.x = L(rig.headG.rotation.x, headX - torsoLean * 0.5, k);
+  rig.torso.rotation.x = L(rig.torso.rotation.x, -torsoLean * 0.4, k);
+  rig.hips.rotation.x = L(rig.hips.rotation.x, -torsoLean * 0.5, k);
+  rig.headG.rotation.x = L(rig.headG.rotation.x, headX + torsoLean * 0.5, k);
   rig.armL.rotation.x = L(rig.armL.rotation.x, armLX, k);
   rig.armR.rotation.x = L(rig.armR.rotation.x, armRX, k);
   rig.armL.rotation.z = L(rig.armL.rotation.z, armLZ, k);
@@ -349,10 +371,11 @@ export function animateHumanoid(rig, dt, p) {
   rig.legL.rotation.x = L(rig.legL.rotation.x, legLX, k);
   rig.legR.rotation.x = L(rig.legR.rotation.x, legRX, k);
 
-  // orient held weapon
+  // orient held weapon: barrel down the arm axis, sights up
   if (rig.weaponMesh) {
     if (rig.gunPose) {
-      rig.weaponMesh.rotation.set(p.aiming ? -1.62 : -1.5, 0, 0);
+      const wr = p.stance === 'prone' ? -2.5 : p.aiming ? -1.62 : -1.5;
+      rig.weaponMesh.rotation.set(wr, 0, 0);
       rig.weaponMesh.position.set(-0.06, -0.05, 0.02);
     } else {
       rig.weaponMesh.rotation.set(0, 0, 0);

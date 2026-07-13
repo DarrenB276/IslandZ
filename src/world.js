@@ -57,14 +57,18 @@ export class World {
     this.spawnLoot();
   }
 
-  // ---------- environment ----------
+  // ---------- environment: day/night cycle ----------
   buildSky() {
+    this.timeOfDay = 9.5;          // hours, 0-24
+    this.dayLength = 1200;         // seconds of real time per in-game day
+    this.timePaused = false;
+    this.daylight = 1;
+
     this.scene.background = new THREE.Color(0x9fb8c8);
     this.scene.fog = new THREE.Fog(0x9fb8c8, 60, 260);
-    const hemi = new THREE.HemisphereLight(0xcfe5ee, 0x4a5a40, 0.85);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xcfe5ee, 0x4a5a40, 0.85);
+    this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xfff2d8, 1.5);
-    sun.position.set(60, 90, 40);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -55; sun.shadow.camera.right = 55;
@@ -74,6 +78,94 @@ export class World {
     this.scene.add(sun);
     this.scene.add(sun.target);
     this.sun = sun;
+
+    // sun disc + light shafts (fake god rays: cheap and mobile-friendly, bloom does the rest)
+    this.sunSprite = this.makeSkySprite('disc', 0xfff4d0);
+    this.sunSprite.scale.setScalar(46);
+    this.raysSprite = this.makeSkySprite('rays', 0xffe9b0);
+    this.raysSprite.scale.setScalar(150);
+    this.moonSprite = this.makeSkySprite('disc', 0xcfe0f5);
+    this.moonSprite.scale.setScalar(22);
+    this.scene.add(this.sunSprite, this.raysSprite, this.moonSprite);
+  }
+
+  makeSkySprite(kind, color) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    if (kind === 'disc') {
+      const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.25, 'rgba(255,255,255,0.85)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 128, 128);
+    } else {
+      // radial streaks
+      ctx.translate(64, 64);
+      for (let i = 0; i < 14; i++) {
+        ctx.rotate(Math.PI * 2 / 14);
+        const g = ctx.createLinearGradient(0, 0, 62, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0.28)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(6, 0);
+        ctx.lineTo(62, -5);
+        ctx.lineTo(62, 5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    const mat = new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(c), color,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true,
+    });
+    return new THREE.Sprite(mat);
+  }
+
+  updateDayNight(dt, playerPos) {
+    if (!this.timePaused) this.timeOfDay = (this.timeOfDay + dt * 24 / this.dayLength) % 24;
+    const ang = (this.timeOfDay - 6) / 12 * Math.PI;   // sunrise 06:00, noon 12:00, sunset 18:00
+    const elev = Math.sin(ang);
+    const daylight = THREE.MathUtils.smoothstep(elev, -0.08, 0.28);
+    this.daylight = daylight;
+    const duskK = THREE.MathUtils.clamp(1 - Math.abs(elev) * 3.2, 0, 1); // near horizon
+
+    // sky / fog color
+    const night = new THREE.Color(0x0a1020), day = new THREE.Color(0x9fb8c8),
+      dusk = new THREE.Color(0xd98a55);
+    const sky = night.clone().lerp(day, daylight).lerp(dusk, duskK * 0.55);
+    this.scene.background.copy(sky);
+    this.scene.fog.color.copy(sky);
+
+    // lights
+    const sunDir = new THREE.Vector3(Math.cos(ang) * 0.85, elev, 0.35).normalize();
+    if (daylight > 0.02) {
+      this.sun.position.set(playerPos.x + sunDir.x * 110, Math.max(8, sunDir.y * 110), playerPos.z + sunDir.z * 110);
+      this.sun.color.set(0xffb35c).lerp(new THREE.Color(0xfff2d8), THREE.MathUtils.clamp(elev * 2.2, 0, 1));
+      this.sun.intensity = 1.6 * daylight;
+    } else {
+      // the moon takes over the directional light
+      this.sun.position.set(playerPos.x - sunDir.x * 110, Math.max(20, -sunDir.y * 110), playerPos.z - sunDir.z * 110);
+      this.sun.color.set(0x8fa8cc);
+      this.sun.intensity = 0.18;
+    }
+    this.sun.target.position.set(playerPos.x, 0, playerPos.z);
+    this.hemi.intensity = 0.12 + 0.85 * daylight;
+    this.hemi.color.set(0x1c2438).lerp(new THREE.Color(0xcfe5ee), daylight);
+    this.hemi.groundColor.set(0x10140f).lerp(new THREE.Color(0x4a5a40), daylight);
+
+    // sky sprites
+    const sunPos = new THREE.Vector3(playerPos.x + sunDir.x * 320, sunDir.y * 320, playerPos.z + sunDir.z * 320);
+    this.sunSprite.position.copy(sunPos);
+    this.raysSprite.position.copy(sunPos);
+    const sunVis = THREE.MathUtils.clamp(elev * 4 + 0.25, 0, 1);
+    this.sunSprite.material.opacity = sunVis;
+    this.raysSprite.material.opacity = sunVis * (0.32 + duskK * 0.35);
+    this.raysSprite.material.rotation += dt * 0.02;
+    this.moonSprite.position.set(playerPos.x - sunDir.x * 320, -sunDir.y * 320, playerPos.z - sunDir.z * 320);
+    this.moonSprite.material.opacity = THREE.MathUtils.clamp(-elev * 4, 0, 1) * 0.8;
   }
 
   buildTerrain() {
@@ -471,9 +563,7 @@ export class World {
   }
 
   update(dt, t, playerPos) {
-    // sun shadow follows player
-    this.sun.position.set(playerPos.x + 60, 90, playerPos.z + 40);
-    this.sun.target.position.set(playerPos.x, 0, playerPos.z);
+    this.updateDayNight(dt, playerPos);
     // item bobbing (only near player to save cycles)
     for (const gi of this.groundItems) {
       if (Math.abs(gi.x - playerPos.x) < 30 && Math.abs(gi.z - playerPos.z) < 30) {

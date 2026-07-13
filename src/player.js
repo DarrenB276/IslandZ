@@ -1,7 +1,7 @@
 // ================= Player: movement, stats, effects, combat, equipment =================
 import * as THREE from 'three';
 import { createHumanoid, animateHumanoid, createWeaponMesh, attachWeapon,
-  setClothingColors, setHeadgear, setMask, setVest } from './character.js';
+  setClothingColors, setHeadgear, setMask, setVest, setBackpack } from './character.js';
 import { makeItem } from './items.js';
 import { SFX } from './audio.js';
 
@@ -47,7 +47,7 @@ export class Player {
 
     // ---- equipment ----
     this.equipment = { head: null, mask: null, top: null, vest: null, gloves: null,
-      belt: null, pants: null, hands: null, shoulder: null };
+      belt: null, pants: null, back: null, hands: null, shoulder: null };
 
     // ---- weapon state ----
     this.fireCooldown = 0;
@@ -66,7 +66,7 @@ export class Player {
   // ================= equipment =================
   containers() {
     const out = [];
-    for (const slot of ['vest', 'top', 'pants', 'belt']) {
+    for (const slot of ['back', 'vest', 'top', 'pants', 'belt']) {
       const it = this.equipment[slot];
       if (it && it.def.cap) {
         if (!it.grid) it.grid = { cols: it.def.cap[0], rows: it.def.cap[1], items: [] };
@@ -113,6 +113,7 @@ export class Player {
     setHeadgear(this.rig, e.head?.def);
     setMask(this.rig, e.mask?.def);
     setVest(this.rig, e.vest?.def);
+    setBackpack(this.rig, e.back?.def);
     const w = e.hands;
     if (w) attachWeapon(this.rig, createWeaponMesh(w.def.id), w.def.cat === 'weapon');
     else attachWeapon(this.rig, null, false);
@@ -345,7 +346,7 @@ export class Player {
   }
 
   damage(amount, { bleedChance = 0, infectChance = 0, part = 'torso' } = {}) {
-    if (this.dead) return;
+    if (this.dead || this.G.dev?.god) return;
     const reduced = amount * (1 - this.armorFor(part));
     this.hp -= reduced;
     this.blood -= reduced * 8;
@@ -468,6 +469,7 @@ export class Player {
       else { target = SPEEDS.walk; anim = 'walk'; }
       if (this.adrenaline > 0) target *= 1.15;
       if (this.fever) target *= 0.9;
+      if (G.dev?.speed) target *= 3;
 
       // desired world direction relative to camera yaw
       const wishYaw = Math.atan2(-m.x, m.y) + c.camYaw;
@@ -478,15 +480,15 @@ export class Player {
       const fixed = G.world.collide(nx, nz, 0.35, this.pos.y);
       this.pos.x = fixed.x; this.pos.z = fixed.z;
 
-      // face movement direction (or camera when aiming)
-      const face = c.aim ? c.camYaw : wishYaw;
+      // face movement direction (or camera when aiming / in first person)
+      const face = (c.aim || G.view === 'fpp') ? c.camYaw : wishYaw;
       let d = face - this.yaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       this.yaw += d * Math.min(1, dt * 10);
     } else {
       this.speed = THREE.MathUtils.lerp(this.speed, 0, Math.min(1, dt * 10));
-      if (c.aim) {
+      if (c.aim || G.view === 'fpp') {
         let d = c.camYaw - this.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
@@ -508,6 +510,12 @@ export class Player {
   }
 
   updateStats(dt) {
+    if (this.G.dev?.god) {
+      this.hp = 100; this.blood = 5000; this.food = 100; this.water = 100;
+      this.stamina = 100; this.wounds = 0;
+      this.cholera = false; this.infection = false; this.fever = false; this.woundDirty = false;
+      return;
+    }
     const sick = this.cholera || this.infection;
     const running = this.speed > 4;
     const drainMul = (sick ? 1.8 : 1) * (running ? 1.9 : this.speed > 2 ? 1.3 : 1);

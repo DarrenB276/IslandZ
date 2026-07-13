@@ -131,6 +131,7 @@ export class Controls {
     press('btn-sprint', (el) => { this.sprint = !this.sprint; el.classList.toggle('active', this.sprint); });
     press('btn-inventory', () => this.emit('inventory'));
     press('btn-swap', () => this.emit('swap'));
+    press('btn-view', () => this.emit('view'));
     press('btn-interact', () => this.emit('interact'));
   }
 
@@ -156,6 +157,7 @@ export class Controls {
         case 'KeyF': this.emit('interact'); break;
         case 'Tab': case 'KeyI': this.emit('inventory'); e.preventDefault(); break;
         case 'KeyX': this.emit('swap'); break;
+        case 'KeyV': this.emit('view'); break;
       }
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });

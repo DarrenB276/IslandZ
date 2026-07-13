@@ -107,6 +107,8 @@ def({ id: 'work_gloves', name: 'Working Gloves', icon: '🧤', w: 1, h: 1, cat: 
 def({ id: 'tac_gloves', name: 'Tactical Gloves', icon: '🧤', w: 1, h: 1, cat: 'clothing', slot: 'gloves', warmth: 1, color: 0x2e3230 });
 def({ id: 'belt', name: 'Leather Belt', icon: '➰', w: 2, h: 1, cat: 'clothing', slot: 'belt', cap: [2, 1], color: 0x4a3524 });
 def({ id: 'mil_belt', name: 'Military Belt', icon: '➰', w: 2, h: 1, cat: 'clothing', slot: 'belt', cap: [3, 1], color: 0x3c4034 });
+def({ id: 'courier_bag', name: 'Courier Bag', icon: '🎒', w: 3, h: 3, cat: 'clothing', slot: 'back', cap: [4, 3], color: 0x7a5c34 });
+def({ id: 'mountain_pack', name: 'Mountain Backpack', icon: '🎒', w: 4, h: 4, cat: 'clothing', slot: 'back', cap: [5, 4], color: 0x445044 });
 def({ id: 'press_vest', name: 'Press Vest', icon: '🦺', w: 3, h: 3, cat: 'clothing', slot: 'vest', cap: [3, 2], armor: 0.25, color: 0x2a4a8a });
 def({ id: 'plate_carrier', name: 'Plate Carrier', icon: '🦺', w: 3, h: 3, cat: 'clothing', slot: 'vest', cap: [2, 2], armor: 0.5, color: 0x2e3128 });
 def({ id: 'highcap_vest', name: 'High Cap Vest', icon: '🦺', w: 3, h: 3, cat: 'clothing', slot: 'vest', cap: [4, 3], armor: 0.1, color: 0x3c3a30 });
@@ -134,6 +136,7 @@ export const LOOT_TABLES = {
     ['tshirt', 4], ['hoodie', 3], ['jeans', 4], ['cap', 3], ['bandana', 2], ['work_gloves', 3],
     ['belt', 3], ['raincoat', 2], ['rags', 5], ['bandage', 3], ['matches', 3], ['duct_tape', 3],
     ['rope', 2], ['painkillers', 2], ['pond_water', 2], ['mp5', 1], ['ammo_9mm', 2], ['flare', 2],
+    ['courier_bag', 2],
   ]),
   military: T([
     ['akm', 4], ['m4a1', 4], ['vs98', 2], ['vaiga', 3], ['mp5', 3],
@@ -141,11 +144,12 @@ export const LOOT_TABLES = {
     ['helmet', 3], ['plate_carrier', 2], ['highcap_vest', 3], ['press_vest', 2], ['tac_gloves', 3],
     ['mil_belt', 3], ['field_jacket', 4], ['cargo_pants', 4], ['hunter_pants', 3], ['boonie', 2],
     ['gas_mask', 2], ['combat_knife', 4], ['canteen', 3], ['adrenaline', 2], ['compass', 2],
+    ['mountain_pack', 2],
   ]),
   hunting: T([
     ['remington', 4], ['vs98', 2], ['ammo_12ga', 8], ['ammo_762x54', 5], ['hunter_pants', 4],
     ['boonie', 3], ['machete', 3], ['combat_knife', 2], ['canteen', 3], ['rice', 3], ['matches', 4],
-    ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1],
+    ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1], ['courier_bag', 2],
   ]),
   medical: T([
     ['bandage', 8], ['rags', 5], ['disinfectant', 5], ['tetracycline', 4], ['charcoal', 4],

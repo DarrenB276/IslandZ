@@ -104,7 +104,8 @@ export class Zombies {
   canSee(z, player) {
     const dx = player.pos.x - z.pos.x, dz = player.pos.z - z.pos.z;
     const dist = Math.hypot(dx, dz);
-    const range = SIGHT_RANGE * player.visibility();
+    // zombies see much shorter at night
+    const range = SIGHT_RANGE * player.visibility() * (0.45 + 0.55 * (this.G.world.daylight ?? 1));
     if (dist > range) return false;
     // vision cone check (zombies have eyes, not radar)
     const fx = -Math.sin(z.yaw), fz = -Math.cos(z.yaw);

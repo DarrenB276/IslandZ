@@ -4,9 +4,15 @@ import { SFX } from './audio.js';
 
 const SLOT_ORDER = [
   ['head', 'HEAD'], ['mask', 'MASK'], ['top', 'TOP'], ['vest', 'VEST'],
-  ['gloves', 'GLOVES'], ['belt', 'BELT'], ['pants', 'PANTS'],
+  ['gloves', 'GLOVES'], ['belt', 'BELT'], ['pants', 'PANTS'], ['back', 'BACK'],
   ['hands', 'HANDS'], ['shoulder', 'SHOULDER'],
 ];
+
+export function gridOf(inst) {
+  if (!inst.def.cap) return null;
+  if (!inst.grid) inst.grid = { cols: inst.def.cap[0], rows: inst.def.cap[1], items: [] };
+  return inst.grid;
+}
 
 // ---------- grid placement helpers ----------
 export function canPlace(grid, inst, x, y, rot) {
@@ -57,8 +63,14 @@ export class Inventory {
     this.sheet = document.getElementById('action-sheet');
     this.drag = null;
     this.cell = 44;
+    this.grids = [];        // rendered grids this frame: {gridEl, grid, ownerInst?}
+    this.openedAt = 0;
 
-    document.getElementById('inv-close').addEventListener('click', () => this.close());
+    // pointerdown (not click): a synthesized click right after opening must not close it
+    document.getElementById('inv-close').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.close();
+    });
     this.rotateBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
       if (this.drag) { this.drag.rot = this.drag.rot ? 0 : 1; this.updateGhost(); SFX.click(); }
@@ -70,6 +82,7 @@ export class Inventory {
 
   open() {
     this.isOpen = true;
+    this.openedAt = performance.now();
     this.el.classList.add('open');
     const cs = getComputedStyle(document.documentElement).getPropertyValue('--cell');
     this.cell = parseFloat(cs) || 44;
@@ -83,10 +96,13 @@ export class Inventory {
   }
 
   close() {
+    // ignore closes fired by the same tap that opened the panel (ghost click on ✕)
+    if (performance.now() - this.openedAt < 400) return;
     this.isOpen = false;
     this.el.classList.remove('open');
     this.closeSheet();
     this.cancelDrag();
+    this.G.onInventoryClosed?.();
   }
 
   toggle() { this.isOpen ? this.close() : this.open(); }
@@ -107,9 +123,29 @@ export class Inventory {
   // ================= rendering =================
   render() {
     if (!this.isOpen) return;
+    this.grids = [];
     this.renderEquipment();
     this.renderContainers();
     this.renderVicinity();
+  }
+
+  // build a DOM grid for any container and register it for drag hit-testing
+  buildGrid(grid, ownerInst) {
+    const gridEl = document.createElement('div');
+    gridEl.className = 'grid';
+    gridEl.style.width = grid.cols * this.cell + 'px';
+    gridEl.style.height = grid.rows * this.cell + 'px';
+    for (const inst of grid.items) {
+      const tile = this.itemTile(inst, 'inv-item');
+      tile.style.left = inst.x * this.cell + 1 + 'px';
+      tile.style.top = inst.y * this.cell + 1 + 'px';
+      tile.style.width = itemW(inst) * this.cell - 2 + 'px';
+      tile.style.height = itemH(inst) * this.cell - 2 + 'px';
+      tile.addEventListener('pointerdown', (e) => this.startDrag(e, inst, { type: 'grid', grid }));
+      gridEl.appendChild(tile);
+    }
+    this.grids.push({ gridEl, grid, ownerInst });
+    return gridEl;
   }
 
   itemTile(inst, cls) {
@@ -178,33 +214,33 @@ export class Inventory {
       head.className = 'container-head';
       const used = c.grid.items.reduce((n, it) => n + it.def.w * it.def.h, 0);
       head.innerHTML = `<span>${c.label}</span><span>${used}/${c.grid.cols * c.grid.rows}</span>`;
-      const gridEl = document.createElement('div');
-      gridEl.className = 'grid';
-      gridEl.style.width = c.grid.cols * this.cell + 'px';
-      gridEl.style.height = c.grid.rows * this.cell + 'px';
-      gridEl.dataset.container = c.slotName;
-      for (const inst of c.grid.items) {
-        const tile = this.itemTile(inst, 'inv-item');
-        tile.style.left = inst.x * this.cell + 1 + 'px';
-        tile.style.top = inst.y * this.cell + 1 + 'px';
-        tile.style.width = itemW(inst) * this.cell - 2 + 'px';
-        tile.style.height = itemH(inst) * this.cell - 2 + 'px';
-        tile.addEventListener('pointerdown', (e) => this.startDrag(e, inst, { type: 'grid', grid: c.grid }));
-        gridEl.appendChild(tile);
-      }
-      block.append(head, gridEl);
+      block.append(head, this.buildGrid(c.grid, c.owner));
       this.containersEl.appendChild(block);
     }
   }
 
   renderVicinity() {
     this.vicinityEl.innerHTML = '';
-    const near = this.G.world.itemsNear(this.G.player.pos, 2.5);
+    const near = this.G.world.itemsNear(this.G.player.pos, 3);
     for (const { gi } of near.slice(0, 12)) {
       const tile = this.itemTile(gi.inst, 'vic-item');
       tile.classList.add('cat-' + gi.inst.def.cat);
       tile.addEventListener('pointerdown', (e) => this.startDrag(e, gi.inst, { type: 'ground', gi }));
       this.vicinityEl.appendChild(tile);
+
+      // ground containers (backpacks, vests, clothes with pockets) expose their own grid,
+      // DayZ style — you can loot them or stash into them without picking them up
+      const grid = gridOf(gi.inst);
+      if (grid) {
+        const block = document.createElement('div');
+        block.className = 'container-block vic-container';
+        const head = document.createElement('div');
+        head.className = 'container-head';
+        const used = grid.items.reduce((n, it) => n + it.def.w * it.def.h, 0);
+        head.innerHTML = `<span>▼ ${gi.inst.def.name} (ground)</span><span>${used}/${grid.cols * grid.rows}</span>`;
+        block.append(head, this.buildGrid(grid, gi.inst));
+        this.vicinityEl.appendChild(block);
+      }
     }
   }
 
@@ -269,20 +305,17 @@ export class Inventory {
 
   // find what is under the pointer; returns {kind, ...}
   hitTest(px, py) {
-    for (const gridEl of this.containersEl.querySelectorAll('.grid')) {
-      const r = gridEl.getBoundingClientRect();
+    for (const entry of this.grids) {
+      const r = entry.gridEl.getBoundingClientRect();
       if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
-        const slotName = gridEl.dataset.container;
-        const c = this.G.player.containers().find((c) => c.slotName === slotName);
-        if (!c) continue;
         const d = this.drag;
         const w = d.rot ? d.inst.def.h : d.inst.def.w;
         const h = d.rot ? d.inst.def.w : d.inst.def.h;
         let cx = Math.round((px - r.left) / this.cell - w / 2);
         let cy = Math.round((py - r.top) / this.cell - h / 2);
-        cx = Math.max(0, Math.min(c.grid.cols - w, cx));
-        cy = Math.max(0, Math.min(c.grid.rows - h, cy));
-        return { kind: 'grid', grid: c.grid, gridEl, x: cx, y: cy };
+        cx = Math.max(0, Math.min(entry.grid.cols - w, cx));
+        cy = Math.max(0, Math.min(entry.grid.rows - h, cy));
+        return { kind: 'grid', grid: entry.grid, gridEl: entry.gridEl, x: cx, y: cy };
       }
     }
     for (const slotEl of this.equipEl.querySelectorAll('.equip-slot')) {
