@@ -1,0 +1,16 @@
+{
+  "name": "islandz",
+  "version": "1.0.0",
+  "description": "Low-poly mobile DayZ-style survival game built with Three.js",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "npx -y http-server -p 8080 -c-1"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}
