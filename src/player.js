@@ -1,11 +1,14 @@
 // ================= Player: movement, stats, effects, combat, equipment =================
 import * as THREE from 'three';
 import { createHumanoid, animateHumanoid, createWeaponMesh, attachWeapon,
-  setClothingColors, setHeadgear, setMask, setVest, setBackpack } from './character.js';
+  setClothingColors, setHeadgear, setMask, setVest, setBackpack, setBoots } from './character.js';
 import { makeItem, ITEMS, attachmentFits } from './items.js';
+import { SEA_LEVEL } from './world.js';
 import { SFX } from './audio.js';
 
-const SPEEDS = { prone: 0.7, crouch: 1.4, walk: 1.8, jog: 3.4, run: 5.6 };
+const SPEEDS = { prone: 0.7, crouch: 1.4, walk: 1.8, jog: 3.4, run: 5.6, swim: 1.7 };
+const SWIM_DEPTH = 0.75;   // water this deep (below sea level) makes you swim
+const FLOAT_Y = SEA_LEVEL - 0.25;
 
 export class Player {
   constructor(G) {
@@ -47,8 +50,10 @@ export class Player {
 
     // ---- equipment ----
     this.equipment = { head: null, mask: null, top: null, vest: null, gloves: null,
-      belt: null, pants: null, back: null, hands: null, shoulder: null };
+      belt: null, pants: null, feet: null, back: null, hands: null, shoulder: null };
     this.quickslots = new Array(10).fill(null); // item uids
+    this.swimming = false;
+    this.groundSlope = 0;
 
     // ---- weapon state ----
     this.fireCooldown = 0;
@@ -61,6 +66,7 @@ export class Player {
     // starting clothes
     this.equip(makeItem('tshirt'), true);
     this.equip(makeItem('jeans'), true);
+    this.equip(makeItem('sneakers'), true);
     this.applyLook();
   }
 
@@ -115,6 +121,7 @@ export class Player {
     setMask(this.rig, e.mask?.def);
     setVest(this.rig, e.vest?.def);
     setBackpack(this.rig, e.back?.def);
+    setBoots(this.rig, e.feet?.def);
     const w = e.hands;
     if (w) attachWeapon(this.rig, createWeaponMesh(w.def.id, w.attachments), w.def.cat === 'weapon');
     else attachWeapon(this.rig, null, false);
@@ -142,6 +149,7 @@ export class Player {
   attachTo(weapon, attInst) {
     if (!attachmentFits(attInst.def, weapon.def)) return false;
     if (!weapon.attachments) weapon.attachments = { optic: null, under: null, mag: null };
+    if (!('muzzle' in weapon.attachments)) weapon.attachments.muzzle = null;
     const slot = attInst.def.atype;
     const prev = weapon.attachments[slot];
     weapon.attachments[slot] = attInst.def.id;
@@ -237,7 +245,7 @@ export class Player {
 
   // ================= combat =================
   pullTrigger() {
-    if (this.dead || this.climbT >= 0 || this.reloading > 0) return;
+    if (this.dead || this.climbT >= 0 || this.reloading > 0 || this.swimming) return;
     const w = this.weapon;
     if (w && w.def.cat === 'weapon') this.tryShoot();
     else this.tryMelee();
@@ -253,18 +261,26 @@ export class Player {
     this.fireCooldown = 60 / w.def.rpm;
 
     const G = this.G;
+    const suppressor = w.attachments?.muzzle ? ITEMS[w.attachments.muzzle] : null;
     const kind = w.def.pellets ? 'shotgun' : (w.def.scoped ? 'sniper' : 'rifle');
-    SFX.shot(kind);
-    G.zombies.alertAt(this.pos, w.def.noise);
+    SFX.shot(kind, suppressor ? 0.3 : 1);
+    G.zombies.alertAt(this.pos, w.def.noise * (suppressor ? suppressor.noiseMul : 1));
 
-    // muzzle world position
-    const muzzle = this.pos.clone();
-    muzzle.y += this.stance === 'prone' ? 0.45 : this.stance === 'crouch' ? 1.1 : 1.45;
-    G.world.addFlash(muzzle.clone().add(new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(0.8)));
+    // aim ray straight from the camera crosshair (respects up/down pitch, no lag)
+    const yaw = G.controls.camYaw, pitch = G.controls.camPitch - this.recoil * 0.5;
+    const aimDir = new THREE.Vector3(
+      -Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)).normalize();
+    // eye/crosshair origin, then a convergence point far down the aim ray
+    const eye = this.pos.clone();
+    eye.y += this.stance === 'prone' ? 0.5 : this.stance === 'crouch' ? 1.15 : 1.58;
+    const aimPoint = eye.clone().addScaledVector(aimDir, 160);
 
-    // fire direction from camera
-    const dir = new THREE.Vector3();
-    G.camera.getWorldDirection(dir);
+    // bullets actually leave the barrel tip
+    const muzzle = (G.getMuzzleWorld && G.getMuzzleWorld()) || eye.clone().addScaledVector(aimDir, 0.6);
+    const dir = aimPoint.clone().sub(muzzle).normalize();
+
+    if (!suppressor) G.world.addFlash(muzzle.clone().addScaledVector(dir, 0.12));
+
     const shots = w.def.pellets ?? 1;
     let spread = w.def.spread * (G.controls.aim ? 1 : 2.6);
     const under = w.attachments?.under ? ITEMS[w.attachments.under] : null;
@@ -323,7 +339,7 @@ export class Player {
       hitPoint.y = G.world.groundHeightSimple(hitPoint.x, hitPoint.z);
       bestZ = null;
     }
-    G.world.addTracer(origin.clone().addScaledVector(dir, 0.9), hitPoint);
+    G.world.addTracer(origin.clone().addScaledVector(dir, 0.15), hitPoint);
     if (bestZ) {
       G.world.addBloodPuff(hitPoint);
       const mult = bestHead ? 2.6 : 1;
@@ -564,9 +580,11 @@ export class Player {
       stance: this.stance,
       speed: this.speed,
       aiming: G.controls.aim,
-      jumping: !this.grounded,
+      jumping: !this.grounded && !this.swimming,
       climbing: this.climbT >= 0 ? this.climbT : null,
       attackT: this.attackT,
+      swimming: this.swimming,
+      groundSlope: this.groundSlope,
     });
   }
 
@@ -576,8 +594,15 @@ export class Player {
     let target = 0;
     let anim = 'idle';
 
+    // are we in deep water? (depth relative to the seabed at our feet)
+    const groundHere = G.world.groundHeightSimple(this.pos.x, this.pos.z);
+    const wasSwimming = this.swimming;
+    this.swimming = groundHere < SEA_LEVEL - SWIM_DEPTH;
+    if (this.swimming && !wasSwimming && this.stance !== 'stand') this.stance = 'stand';
+
     if (mag > 0.05) {
-      if (this.stance === 'prone') { target = SPEEDS.prone; anim = 'prone'; }
+      if (this.swimming) { target = SPEEDS.swim; anim = 'swim'; }
+      else if (this.stance === 'prone') { target = SPEEDS.prone; anim = 'prone'; }
       else if (this.stance === 'crouch') { target = SPEEDS.crouch; anim = 'crouch'; }
       else if (c.sprint && this.stamina > 1 && mag > 0.4) { target = SPEEDS.run; anim = 'run'; }
       else if (mag > 0.45) { target = SPEEDS.jog; anim = 'jog'; }
@@ -593,10 +618,8 @@ export class Player {
       let nx = this.pos.x + dx * this.speed * dt;
       let nz = this.pos.z + dz * this.speed * dt;
       const fixed = G.world.collide(nx, nz, 0.35, this.pos.y);
-      // can't swim: stop at the waterline
-      if (G.world.groundHeightSimple(fixed.x, fixed.z) > -0.25) {
-        this.pos.x = fixed.x; this.pos.z = fixed.z;
-      }
+      // water is walkable/swimmable now — only trees & walls (colliders) still block
+      this.pos.x = fixed.x; this.pos.z = fixed.z;
 
       // face movement direction (or camera when aiming / in first person)
       const face = (c.aim || G.view === 'fpp') ? c.camYaw : wishYaw;
@@ -613,17 +636,29 @@ export class Player {
         this.yaw += d * Math.min(1, dt * 10);
       }
     }
-    this.moveState = this.grounded ? anim : 'jump';
+    this.moveState = this.swimming ? 'swim' : this.grounded ? anim : 'jump';
 
-    // gravity / ground
-    const ground = G.world.groundHeight(this.pos.x, this.pos.z, this.pos.y);
-    if (!this.grounded) {
-      this.vy -= 18 * dt;
-      this.pos.y += this.vy * dt;
-      if (this.pos.y <= ground) { this.pos.y = ground; this.grounded = true; this.vy = 0; }
+    // forward ground slope for foot planting (sample ahead/behind along facing)
+    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+    const hF = G.world.groundHeightSimple(this.pos.x + fx * 0.5, this.pos.z + fz * 0.5);
+    const hB = G.world.groundHeightSimple(this.pos.x - fx * 0.5, this.pos.z - fz * 0.5);
+    this.groundSlope = Math.atan2(hF - hB, 1.0);
+
+    // vertical: float while swimming, otherwise gravity + ground follow
+    if (this.swimming) {
+      this.grounded = false;
+      this.pos.y = THREE.MathUtils.lerp(this.pos.y, FLOAT_Y, Math.min(1, dt * 4));
+      this.vy = 0;
     } else {
-      this.pos.y = THREE.MathUtils.lerp(this.pos.y, ground, Math.min(1, dt * 12));
-      if (ground < this.pos.y - 0.4) this.grounded = false; // walked off an edge
+      const ground = G.world.groundHeight(this.pos.x, this.pos.z, this.pos.y);
+      if (!this.grounded) {
+        this.vy -= 18 * dt;
+        this.pos.y += this.vy * dt;
+        if (this.pos.y <= ground) { this.pos.y = ground; this.grounded = true; this.vy = 0; }
+      } else {
+        this.pos.y = THREE.MathUtils.lerp(this.pos.y, ground, Math.min(1, dt * 12));
+        if (ground < this.pos.y - 0.4) this.grounded = false; // walked off an edge
+      }
     }
   }
 

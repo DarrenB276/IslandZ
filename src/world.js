@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { rollLoot, makeItem } from './items.js';
 
-const SIZE = 440;
-const ISLAND_R = 195;      // island radius: beyond this the ground dives underwater
+const SIZE = 880;          // 4 chunks (2x2) — quadruple the play area
+const ISLAND_R = 360;      // island radius: beyond this the ground dives underwater
 export const SEA_LEVEL = -0.42;
 
 // deterministic-ish gentle terrain, shaped into an island
@@ -85,7 +85,7 @@ export class World {
     this.daylight = 1;
 
     this.scene.background = new THREE.Color(0x9fb8c8);
-    this.scene.fog = new THREE.Fog(0x9fb8c8, 60, 260);
+    this.scene.fog = new THREE.Fog(0x9fb8c8, 90, 420);
     this.hemi = new THREE.HemisphereLight(0xcfe5ee, 0x4a5a40, 0.85);
     this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xfff2d8, 1.5);
@@ -198,7 +198,7 @@ export class World {
   }
 
   buildTerrain() {
-    const seg = 110;
+    const seg = 176;
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
@@ -246,7 +246,7 @@ export class World {
 
   // ---------- ocean ----------
   buildWater() {
-    const geo = new THREE.PlaneGeometry(1600, 1600, 72, 72);
+    const geo = new THREE.PlaneGeometry(3600, 3600, 140, 140);
     geo.rotateX(-Math.PI / 2);
     this.waterUniforms = {
       uTime: { value: 0 },
@@ -254,9 +254,10 @@ export class World {
       uSunColor: { value: new THREE.Color(0xfff2d8) },
       uSunI: { value: 1 },
       uSky: { value: new THREE.Color(0x9fb8c8) },
-      uDeep: { value: new THREE.Color(0x0b3140) },
-      uShallow: { value: new THREE.Color(0x2e7d8c) },
+      uDeep: { value: new THREE.Color(0x08303f) },
+      uShallow: { value: new THREE.Color(0x2f8ea0) },
       uCamPos: { value: new THREE.Vector3() },
+      uShoreR: { value: ISLAND_R },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.waterUniforms,
@@ -265,44 +266,62 @@ export class World {
         uniform float uTime;
         varying vec3 vWorld;
         varying vec3 vNormal;
+        varying float vFoam;
+        // stacked gerstner-ish sines for a richer surface
         float waveH(vec2 p, float t) {
-          return sin(p.x*0.11 + t*1.1) * cos(p.y*0.09 + t*0.8) * 0.16
-               + sin(p.x*0.32 - t*1.8 + p.y*0.28) * 0.055
-               + sin(p.x*0.06 + p.y*0.05 + t*0.4) * 0.1;
+          float h = 0.0;
+          h += sin(p.x*0.09 + t*1.0) * cos(p.y*0.075 + t*0.7) * 0.20;
+          h += sin(p.x*0.021 + p.y*0.017 + t*0.45) * 0.16;
+          h += sin(p.x*0.28 - t*1.7 + p.y*0.24) * 0.06;
+          h += sin(p.x*0.52 + t*2.3 - p.y*0.4) * 0.03;
+          h += sin(p.y*0.63 - t*2.0) * 0.02;
+          return h;
         }
         void main() {
           vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
           float h = waveH(wp.xz, uTime);
           wp.y += h;
-          float e = 0.7;
+          float e = 0.6;
           float hx = waveH(wp.xz + vec2(e, 0.0), uTime);
           float hz = waveH(wp.xz + vec2(0.0, e), uTime);
-          vNormal = normalize(vec3(h - hx, e, h - hz));
+          vNormal = normalize(vec3((h - hx)/e, 1.0, (h - hz)/e));
+          vFoam = smoothstep(0.16, 0.28, h);   // whitecaps on wave crests
           vWorld = wp;
           gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
         }`,
       fragmentShader: `
         uniform vec3 uSky, uDeep, uShallow, uSunDir, uSunColor, uCamPos;
-        uniform float uSunI;
+        uniform float uSunI, uShoreR;
         varying vec3 vWorld;
         varying vec3 vNormal;
+        varying float vFoam;
         void main() {
           vec3 V = normalize(uCamPos - vWorld);
           vec3 N = normalize(vNormal);
-          float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);
+          float fres = pow(1.0 - max(dot(V, N), 0.0), 4.0);
           float d = length(vWorld.xz);
-          float shore = 1.0 - smoothstep(140.0, 210.0, d);
-          vec3 col = mix(mix(uDeep, uShallow, shore * 0.9), uSky, fres * 0.85);
+          // shallow water is brighter near the shore ring
+          float shore = 1.0 - smoothstep(uShoreR*0.55, uShoreR, d);
+          vec3 body = mix(uDeep, uShallow, shore);
+          vec3 col = mix(body, uSky, clamp(fres, 0.0, 0.9));
+          // sharp sun specular
           vec3 H = normalize(V + normalize(uSunDir));
-          col += uSunColor * pow(max(dot(N, H), 0.0), 180.0) * 2.4 * uSunI;
-          // match the scene fog so the horizon blends
-          float fogF = smoothstep(60.0, 260.0, length(uCamPos - vWorld));
+          float spec = pow(max(dot(N, H), 0.0), 220.0);
+          col += uSunColor * spec * 3.0 * uSunI;
+          // soft foam on crests and right at the beach line
+          float beach = smoothstep(uShoreR*0.985, uShoreR*0.9, d);
+          float foam = clamp(vFoam * 0.5 + beach * 0.7, 0.0, 1.0);
+          col = mix(col, vec3(0.9, 0.95, 0.97), foam * 0.6);
+          // match scene fog (90..420)
+          float fogF = smoothstep(90.0, 420.0, length(uCamPos - vWorld));
           col = mix(col, uSky, fogF);
-          gl_FragColor = vec4(col, 0.94 - fogF * 0.1);
+          float alpha = mix(0.86, 0.97, clamp(fres + foam, 0.0, 1.0)) - fogF * 0.12;
+          gl_FragColor = vec4(col, alpha);
         }`,
     });
     const water = new THREE.Mesh(geo, mat);
     water.position.y = SEA_LEVEL;
+    water.renderOrder = 1;
     this.scene.add(water);
   }
 
@@ -402,27 +421,23 @@ export class World {
     this.house(-88, -70, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting');
     this.house(95, 60, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting');
 
+    // ----- outer settlements (the island is large now) -----
+    // east coastal village
+    this.house(103, 38, 8, 7, 0xa89880, R, 'residential', -Math.PI / 2);
+    this.house(110, 0, 9, 7, 0x8f9a8a, Rr, 'residential', -Math.PI / 2);
+    this.house(103, -38, 8, 7, 0x9a8a78, R, 'residential', -Math.PI / 2);
+    this.house(130, 0, 7, 7, 0x93a08c, Rr, 'residential', -Math.PI / 2);
+    // far north outpost + clinic
+    this.house(-30, 167, 9, 8, 0xc8ccc8, 0x8a3a34, 'medical', Math.PI);
+    this.house(-65, 152, 8, 7, 0xa09078, R, 'residential', Math.PI);
+    // far hunting lodges
+    this.house(-170, 0, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting', -Math.PI / 2);
+    this.house(-30, -167, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting', Math.PI);
+    // second military camp (far NW plateau)
+    this.tentCamp(-75, -130);
+
     // military camp NW (on the dry plateau — the lowlands to the east are a lake)
-    const mx = -70, mz = -90;
-    for (let i = 0; i < 3; i++) {
-      const tx = mx + i * 9, tz = mz;
-      const tent = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 6, 3, 1),
-        new THREE.MeshLambertMaterial({ color: 0x4a563e, flatShading: true }));
-      tent.rotation.z = Math.PI / 2;
-      tent.rotation.y = Math.PI / 2;
-      tent.position.set(tx, terrainHeight(tx, tz) + 1.15, tz);
-      tent.castShadow = true;
-      this.scene.add(tent);
-      this.addBoxCollider(tx - 1.9, tx + 1.9, tz - 2.9, tz + 2.9);
-      for (let j = 0; j < 3; j++) {
-        this.lootSpots.push({ x: tx + (Math.random() - 0.5) * 2, z: tz + 3.6 + Math.random() * 2, table: 'military' });
-      }
-      this.zombieSpawns.push({ x: tx + 4, z: tz + 8 });
-    }
-    this.crate(mx + 4, mz + 8, 1, 0x4a563e);
-    this.crate(mx + 12, mz + 7, 1.2, 0x4a563e);
-    this.lootSpots.push({ x: mx + 5.5, z: mz + 8, table: 'military' });
-    this.lootSpots.push({ x: mx + 13.5, z: mz + 7, table: 'military' });
+    this.tentCamp(-70, -90);
 
     // scattered town props: crates & low walls (climbable)
     this.crate(6, 6, 1, 0x6a5a44);
@@ -442,6 +457,29 @@ export class World {
     this.lootSpots.push({ x: this.pond.x + 10, z: this.pond.z, table: 'residential' });
   }
 
+  tentCamp(mx, mz) {
+    this.buildings.push({ x: mx + 9, z: mz, table: 'military', mil: true });
+    for (let i = 0; i < 3; i++) {
+      const tx = mx + i * 9, tz = mz;
+      const tent = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 6, 3, 1),
+        new THREE.MeshLambertMaterial({ color: 0x4a563e, flatShading: true }));
+      tent.rotation.z = Math.PI / 2;
+      tent.rotation.y = Math.PI / 2;
+      tent.position.set(tx, terrainHeight(tx, tz) + 1.15, tz);
+      tent.castShadow = true;
+      this.scene.add(tent);
+      this.addBoxCollider(tx - 1.9, tx + 1.9, tz - 2.9, tz + 2.9);
+      for (let j = 0; j < 3; j++) {
+        this.lootSpots.push({ x: tx + (Math.random() - 0.5) * 2, z: tz + 3.6 + Math.random() * 2, table: 'military' });
+      }
+      this.zombieSpawns.push({ x: tx + 4, z: tz + 8 });
+    }
+    this.crate(mx + 4, mz + 8, 1, 0x4a563e);
+    this.crate(mx + 12, mz + 7, 1.2, 0x4a563e);
+    this.lootSpots.push({ x: mx + 5.5, z: mz + 8, table: 'military' });
+    this.lootSpots.push({ x: mx + 13.5, z: mz + 7, table: 'military' });
+  }
+
   buildForest() {
     const pineGeo = new THREE.ConeGeometry(1.6, 4.4, 6);
     const pineMat = new THREE.MeshLambertMaterial({ color: 0x3d5a33, flatShading: true });
@@ -453,14 +491,16 @@ export class World {
     const rockGeo = new THREE.DodecahedronGeometry(1, 0);
     const rockMat = new THREE.MeshLambertMaterial({ color: 0x7d7f78, flatShading: true });
 
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 620; i++) {
       const x = (Math.random() - 0.5) * (SIZE - 30);
       const z = (Math.random() - 0.5) * (SIZE - 30);
       if (Math.hypot(x, z) < 42) continue;                       // keep town clear
       if (terrainHeight(x, z) < 0.75) continue;                  // no trees on the beach or seabed
       if (Math.hypot(x - 46, z + 30) < 13) continue;             // pond
-      if (Math.hypot(x + 61, z + 90) < 20) continue;             // military camp
-      if (Math.hypot(x + 88, z + 70) < 8 || Math.hypot(x - 95, z - 60) < 8) continue; // cabins
+      // keep POIs (camps, houses, tents) clear of trees
+      let blocked = false;
+      for (const b of this.buildings) { if (Math.hypot(x - b.x, z - b.z) < (b.mil ? 22 : 9)) { blocked = true; break; } }
+      if (blocked) continue;
       const y = terrainHeight(x, z);
       const s = 0.7 + Math.random() * 0.9;
       const kind = Math.random();

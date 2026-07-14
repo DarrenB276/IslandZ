@@ -56,9 +56,14 @@ export function createHumanoid(opts = {}) {
   vestMesh.visible = false;
   hips.add(vestMesh);
 
+  // neck between torso and head
+  const neck = box(0.13, 0.12, 0.13, skin);
+  neck.position.y = 0.55;
+  hips.add(neck);
+
   // NOTE: the model's visual front is -Z (matches movement math and three.js convention)
   const headG = new THREE.Group();
-  headG.position.y = 0.58;
+  headG.position.y = 0.62;
   hips.add(headG);
   const head = box(0.24, 0.26, 0.24, skin);
   head.position.y = 0.15;
@@ -109,7 +114,7 @@ export function createHumanoid(opts = {}) {
   const handL = box(0.11, 0.1, 0.11, skin); handL.position.y = -0.3; elbowL.add(handL);
   const handR = box(0.11, 0.1, 0.11, skin); handR.position.y = -0.3; elbowR.add(handR);
 
-  // legs — hip pivot, knee joint
+  // legs — hip pivot, knee joint, ankle + foot
   const legL = jointedLimb(0.16, 0.44, 0.42, 0.16, pants, pants);
   legL.position.set(-0.12, 0, 0);
   hips.add(legL);
@@ -118,20 +123,53 @@ export function createHumanoid(opts = {}) {
   hips.add(legR);
   const kneeL = legL.userData.joint, kneeR = legR.userData.joint;
 
+  // ankle groups sit at the bottom of each shin; foot extends forward (-Z)
+  function makeFoot(kneeJoint) {
+    const ankle = new THREE.Group();
+    ankle.position.y = -0.42;              // bottom of the lower leg
+    kneeJoint.add(ankle);
+    const foot = box(0.15, 0.09, 0.28, 0x3a2f26);
+    foot.position.set(0, -0.02, -0.07);    // heel under ankle, toes forward
+    ankle.add(foot);
+    ankle.userData.foot = foot;
+    return ankle;
+  }
+  const ankleL = makeFoot(kneeL), ankleR = makeFoot(kneeR);
+
   // weapon mount at the end of the right forearm
   const weaponMount = new THREE.Group();
   weaponMount.position.y = -0.3;
   elbowR.add(weaponMount);
 
   const rig = {
-    group: root, body, hips, torso, headG, head, armL, armR, legL, legR,
-    elbowL, elbowR, kneeL, kneeR, weaponMount,
+    group: root, body, hips, torso, neck, headG, head, armL, armR, legL, legR,
+    elbowL, elbowR, kneeL, kneeR, ankleL, ankleR, weaponMount,
     vestMesh, maskMesh, backpackMesh,
+    footL: ankleL.userData.foot, footR: ankleR.userData.foot,
     hats: { cap: hatCap, boonie: hatBoonie, helmet: hatHelmet, moto: hatMoto },
     hairMesh, handL, handR,
     phase: Math.random() * 10, weaponMesh: null, meleePose: false, gunPose: false,
+    footPlantL: 0, footPlantR: 0,
   };
   return rig;
+}
+
+export function setBoots(rig, def) {
+  const c = def?.color ?? 0x3a2f26;   // bare feet ~ dark shoe-less
+  rig.footL.material.color.setHex(c);
+  rig.footR.material.color.setHex(c);
+}
+
+// first-person: keep the lower body (hips, legs, feet) so the player sees their legs/boots
+// when looking down, but hide the parts that would fill the camera (head, neck, torso, arms).
+export function setFirstPersonBody(rig, on) {
+  rig.headG.visible = !on;
+  rig.neck.visible = !on;
+  rig.torso.visible = !on;
+  rig.armL.visible = !on;
+  rig.armR.visible = !on;
+  rig.vestMesh.visible = on ? false : !!rig.vestMesh.userData.want;
+  if (rig.weaponMesh) rig.weaponMesh.visible = !on; // the FPP viewmodel shows the weapon instead
 }
 
 export function setBackpack(rig, def) {
@@ -173,6 +211,7 @@ export function setMask(rig, def) {
 }
 
 export function setVest(rig, def) {
+  rig.vestMesh.userData.want = !!def;
   rig.vestMesh.visible = !!def;
   if (def) rig.vestMesh.material.color.setHex(def.color);
 }
@@ -304,11 +343,27 @@ export function createWeaponMesh(id, attachments) {
       g.add(laser);
       g.userData.laser = laser;
     }
-    if (attachments.mag) {
-      add(0.055, 0.09, 0.08, dark, 0, -0.17, -0.03);     // extended mag sticks out
+    if (attachments.mag === 'mag_drum') {
+      add(0.05, 0.18, 0.18, dark, 0, -0.16, -0.02);      // drum magazine
+    } else if (attachments.mag) {
+      add(0.055, 0.11, 0.08, dark, 0, -0.18, -0.03);     // extended mag sticks out
+    }
+    if (attachments.muzzle) {                            // suppressor extends the barrel
+      const bb0 = new THREE.Box3().setFromObject(g);
+      add(0.05, 0.05, 0.16, 0x1c1c1e, 0, 0.0, bb0.min.z - 0.07);
     }
   }
+
+  // record the barrel-tip (most -Z point) so bullets can leave the muzzle
+  if (isGunId(id)) {
+    const bb = new THREE.Box3().setFromObject(g);
+    g.userData.muzzleLocal = new THREE.Vector3(0, (bb.min.y + bb.max.y) / 2 + 0.02, bb.min.z + 0.02);
+  }
   return g;
+}
+
+function isGunId(id) {
+  return ['akm', 'm4a1', 'vs98', 'remington', 'vaiga', 'mp5', 'm249'].includes(id);
 }
 
 // ================= procedural animation =================
@@ -341,8 +396,29 @@ export function animateHumanoid(rig, dt, p) {
   }
 
   const swing = moving ? Math.min(1, speed / 2.2) * (0.5 + Math.min(1, speed / 5) * 0.55) : 0;
+  const slope = p.groundSlope || 0;   // forward ground slope in radians
+  let ankL = 0, ankR = 0;             // ankle pitch (foot planting)
+  let swimBlend = 0;
 
-  if (p.climbing != null && p.climbing >= 0) {
+  if (p.swimming) {
+    // horizontal breaststroke — body flat, arms sweep, legs flutter
+    swimBlend = 1;
+    rig.phase += dt * 3;
+    bodyRotX = -Math.PI / 2 * 0.92;
+    hipY = 0.9;
+    headX = 1.2;
+    armLX = 1.7 + s(t * 1.6) * 1.1;
+    armRX = 1.7 - s(t * 1.6) * 1.1;
+    armLZ = 0.5 + s(t * 1.6) * 0.4;
+    armRZ = -0.5 - s(t * 1.6) * 0.4;
+    elbL = 0.5 + Math.max(0, s(t * 1.6)) * 0.6;
+    elbR = 0.5 + Math.max(0, -s(t * 1.6)) * 0.6;
+    legLX = 0.3 + s(t * 2.4) * 0.4;
+    legRX = 0.3 - s(t * 2.4) * 0.4;
+    kneL = 0.3 + Math.max(0, s(t * 2.4)) * 0.5;
+    kneR = 0.3 + Math.max(0, -s(t * 2.4)) * 0.5;
+    ankL = -0.7; ankR = -0.7;
+  } else if (p.climbing != null && p.climbing >= 0) {
     // climbing a ledge: arms reach forward/up, legs push
     const c = p.climbing;
     armLX = 2.4 + s(c * 10) * 0.3;
@@ -423,7 +499,7 @@ export function animateHumanoid(rig, dt, p) {
   }
 
   // weapon poses override arms — bent elbows give a proper tactical hold
-  if (rig.gunPose && !p.zombie && p.stance !== 'prone' && p.climbing == null) {
+  if (rig.gunPose && !p.zombie && !p.swimming && p.stance !== 'prone' && p.climbing == null) {
     if (p.aiming) {
       armRX = 1.05; armRZ = -0.12; elbR = 0.5;
       armLX = 0.85; armLZ = 0.42; elbL = 0.85;
@@ -436,7 +512,7 @@ export function animateHumanoid(rig, dt, p) {
     armRX = 2.3; armLX = 2.2; armLZ = 0.3;
     elbR = 0.7; elbL = 0.85;
   }
-  if (rig.meleePose && !p.zombie) {
+  if (rig.meleePose && !p.zombie && !p.swimming) {
     armRX = Math.max(armRX, 0.3);
     elbR = Math.max(elbR, 0.55);
     if (p.attackT != null) {
@@ -458,6 +534,16 @@ export function animateHumanoid(rig, dt, p) {
     armLX = 0.5;
   }
 
+  // feet: cancel most of the leg's pitch so soles stay near the ground surface, add slope
+  if (!p.swimming) {
+    if (p.stance === 'prone') { ankL = 0.5; ankR = 0.5; }
+    else {
+      ankL = slope - (legLX - kneL) * 0.55;
+      ankR = slope - (legRX - kneR) * 0.55;
+      if (p.stance === 'crouch') { ankL += 0.15; ankR += 0.15; }
+    }
+  }
+
   // apply with smoothing (lean forward = negative X rotation; knee bend = negative)
   const k = Math.min(1, dt * 14);
   rig.hips.position.y = L(rig.hips.position.y, hipY, k);
@@ -475,6 +561,8 @@ export function animateHumanoid(rig, dt, p) {
   rig.legR.rotation.x = L(rig.legR.rotation.x, legRX, k);
   rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, -Math.max(0, kneL), k);
   rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, -Math.max(0, kneR), k);
+  rig.ankleL.rotation.x = L(rig.ankleL.rotation.x, THREE.MathUtils.clamp(ankL, -1.1, 1.1), k);
+  rig.ankleR.rotation.x = L(rig.ankleR.rotation.x, THREE.MathUtils.clamp(ankR, -1.1, 1.1), k);
 
   // orient held weapon: keep the barrel level with the forearm
   if (rig.weaponMesh) {

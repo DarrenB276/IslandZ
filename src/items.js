@@ -49,6 +49,13 @@ def({ id: 'under_laser', name: 'Laser Sight', icon: '📍', w: 1, h: 1, cat: 'at
   hipSpreadMul: 0.65, light: 'laser', desc: 'Visible laser. Much tighter hip fire.' });
 def({ id: 'mag_ext', name: 'Extended Mag', icon: '🧲', w: 1, h: 2, cat: 'attachment', atype: 'mag',
   magMul: 1.6, fits: ['akm', 'm4a1', 'mp5', 'vaiga'], desc: '+60% magazine capacity.' });
+def({ id: 'mag_drum', name: 'Drum Magazine', icon: '⭕', w: 2, h: 2, cat: 'attachment', atype: 'mag',
+  magMul: 2.5, fits: ['akm', 'm4a1', 'mp5'], desc: 'x2.5 magazine capacity.' });
+// suppressors (muzzle slot): cut noise + hide muzzle flash
+def({ id: 'sup_rifle', name: 'Rifle Suppressor', icon: '🥫', w: 1, h: 2, cat: 'attachment', atype: 'muzzle',
+  noiseMul: 0.35, fits: ['akm', 'm4a1', 'm249', 'vs98'], desc: 'Muffles rifle report; hides flash.' });
+def({ id: 'sup_pistol', name: 'Pistol Suppressor', icon: '🥫', w: 1, h: 1, cat: 'attachment', atype: 'muzzle',
+  noiseMul: 0.3, fits: ['mp5'], desc: 'Muffles 9mm report; hides flash.' });
 
 // ---------- Melee ----------
 def({ id: 'machete', name: 'Machete', icon: '🔪', w: 1, h: 4, cat: 'melee', dmg: 42, rate: 1.0, range: 1.9,
@@ -130,6 +137,11 @@ def({ id: 'bandana', name: 'Bandana', icon: '🟥', w: 1, h: 1, cat: 'clothing',
 def({ id: 'gas_mask', name: 'Gas Mask', icon: '🎭', w: 2, h: 2, cat: 'clothing', slot: 'mask', color: 0x33362e });
 def({ id: 'work_gloves', name: 'Working Gloves', icon: '🧤', w: 1, h: 1, cat: 'clothing', slot: 'gloves', warmth: 1, color: 0x7a6648 });
 def({ id: 'tac_gloves', name: 'Tactical Gloves', icon: '🧤', w: 1, h: 1, cat: 'clothing', slot: 'gloves', warmth: 1, color: 0x2e3230 });
+// ---------- Footwear (feet slot) ----------
+def({ id: 'sneakers', name: 'Sneakers', icon: '👟', w: 2, h: 1, cat: 'clothing', slot: 'feet', warmth: 1, color: 0xd8d8d0 });
+def({ id: 'boots', name: 'Leather Boots', icon: '🥾', w: 2, h: 1, cat: 'clothing', slot: 'feet', warmth: 2, color: 0x5a4028 });
+def({ id: 'combat_boots', name: 'Combat Boots', icon: '🥾', w: 2, h: 1, cat: 'clothing', slot: 'feet', warmth: 2, armor: 0.05, color: 0x23252a });
+def({ id: 'rubber_boots', name: 'Rubber Boots', icon: '🥾', w: 2, h: 1, cat: 'clothing', slot: 'feet', warmth: 2, color: 0x2c5a3a });
 def({ id: 'belt', name: 'Leather Belt', icon: '➰', w: 2, h: 1, cat: 'clothing', slot: 'belt', cap: [2, 1], color: 0x4a3524 });
 def({ id: 'mil_belt', name: 'Military Belt', icon: '➰', w: 2, h: 1, cat: 'clothing', slot: 'belt', cap: [3, 1], color: 0x3c4034 });
 def({ id: 'courier_bag', name: 'Courier Bag', icon: '🎒', w: 3, h: 3, cat: 'clothing', slot: 'back', cap: [4, 3], color: 0x7a5c34 });
@@ -147,7 +159,7 @@ export function makeItem(id, qty) {
   if (d.uses) inst.usesLeft = d.uses;
   if (d.cat === 'weapon') {
     inst.loaded = qty ?? Math.floor(d.mag * (0.3 + Math.random() * 0.7));
-    inst.attachments = { optic: null, under: null, mag: null };
+    inst.attachments = { optic: null, under: null, mag: null, muzzle: null };
   }
   return inst;
 }
@@ -171,12 +183,13 @@ export const LOOT_TABLES = {
     ['tshirt', 4], ['hoodie', 3], ['jeans', 4], ['cap', 3], ['bandana', 2], ['work_gloves', 3],
     ['belt', 3], ['raincoat', 2], ['rags', 5], ['bandage', 3], ['matches', 3], ['duct_tape', 3],
     ['rope', 2], ['painkillers', 2], ['pond_water', 2], ['mp5', 1], ['ammo_9mm', 2], ['flare', 2],
-    ['courier_bag', 2],
+    ['courier_bag', 2], ['sneakers', 4], ['boots', 3], ['rubber_boots', 2],
   ]),
   military: T([
     ['akm', 4], ['m4a1', 4], ['vs98', 2], ['vaiga', 3], ['mp5', 3], ['m249', 1],
     ['optic_rds', 3], ['optic_acog', 2], ['optic_pso1', 2], ['grip_foregrip', 3],
-    ['under_flashlight', 2], ['under_laser', 2], ['mag_ext', 2], ['map', 2],
+    ['under_flashlight', 2], ['under_laser', 2], ['mag_ext', 2], ['mag_drum', 1],
+    ['sup_rifle', 2], ['sup_pistol', 2], ['map', 2], ['combat_boots', 3],
     ['ammo_762x39', 8], ['ammo_556', 8], ['ammo_762x54', 4], ['ammo_12ga', 6], ['ammo_9mm', 6],
     ['helmet', 3], ['plate_carrier', 2], ['highcap_vest', 3], ['press_vest', 2], ['tac_gloves', 3],
     ['mil_belt', 3], ['field_jacket', 4], ['cargo_pants', 4], ['hunter_pants', 3], ['boonie', 2],
@@ -187,7 +200,8 @@ export const LOOT_TABLES = {
     ['remington', 4], ['vs98', 2], ['ammo_12ga', 8], ['ammo_762x54', 5], ['hunter_pants', 4],
     ['optic_hunting', 3], ['map', 2], ['compass', 2],
     ['boonie', 3], ['machete', 3], ['combat_knife', 2], ['canteen', 3], ['rice', 3], ['matches', 4],
-    ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1], ['courier_bag', 2],
+    ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1], ['courier_bag', 2], ['boots', 3],
+    ['sup_rifle', 1],
   ]),
   medical: T([
     ['bandage', 8], ['rags', 5], ['disinfectant', 5], ['tetracycline', 4], ['charcoal', 4],

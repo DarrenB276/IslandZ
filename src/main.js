@@ -12,7 +12,7 @@ import { Inventory } from './inventory.js';
 import { HUD } from './hud.js';
 import { DevMode } from './dev.js';
 import { Settings } from './settings.js';
-import { createWeaponMesh } from './character.js';
+import { createWeaponMesh, setFirstPersonBody } from './character.js';
 import { initAudio } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -76,6 +76,18 @@ function refreshViewmodel() {
 }
 G.onWeaponVisualChanged = () => { viewmodelSig = '~'; }; // force rebuild next frame
 
+// world-space barrel tip of whichever weapon mesh is currently shown (FPP viewmodel or TPP rig)
+const _muzzleTmp = new THREE.Vector3();
+G.getMuzzleWorld = () => {
+  const fpp = G.view === 'fpp' && !G.player.dead;
+  const mesh = fpp ? vmMesh : G.player.rig.weaponMesh;
+  if (mesh && mesh.userData.muzzleLocal) {
+    mesh.updateWorldMatrix(true, false);
+    return mesh.localToWorld(_muzzleTmp.copy(mesh.userData.muzzleLocal)).clone();
+  }
+  return null;
+};
+
 // FPP weapon poses: idle tactical hold / hip-fire / ADS
 const VM_POSES = {
   idle: { pos: [0.27, -0.3, -0.46], rot: [0.32, 0.32, 0.06] },   // low ready, angled in
@@ -126,12 +138,16 @@ function updateCamera(dt) {
   const yaw = c.camYaw;
   const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-  p.rig.group.visible = !fpp;
+  // in FPP the body stays visible (DayZ-style) but head/arms are hidden so they don't block the view
+  p.rig.group.visible = true;
+  setFirstPersonBody(p.rig, fpp);
   viewmodel.visible = fpp && !(w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming);
 
   if (fpp) {
-    const eyeY = p.pos.y + (EYE[p.stance] ?? 1.58) + (p.climbT >= 0 ? 0.2 : 0);
-    camera.position.set(p.pos.x, eyeY, p.pos.z);
+    const eyeY = p.pos.y + (p.swimming ? 1.15 : (EYE[p.stance] ?? 1.58)) + (p.climbT >= 0 ? 0.2 : 0);
+    // camera at the head, nudged back a touch so the torso/legs are visible below (DayZ-style)
+    const bx = Math.sin(yaw) * 0.16, bz = Math.cos(yaw) * 0.16; // horizontal back-offset
+    camera.position.set(p.pos.x + bx, eyeY, p.pos.z + bz);
     camera.lookAt(camera.position.clone().add(fwd));
     updateViewmodelPose(dt);
     // sway/bob layered on top of the pose
@@ -206,7 +222,7 @@ let mapDrawn = false;
 function drawMapBase() {
   const cv = document.getElementById('map-canvas');
   const ctx = cv.getContext('2d');
-  const S = cv.width, EXT = 230; // world units from center shown
+  const S = cv.width, EXT = 400; // world units from center shown
   const toPx = (v) => (v / EXT + 1) * S / 2;
   for (let py = 0; py < S; py += 2) {
     for (let px = 0; px < S; px += 2) {
@@ -230,14 +246,11 @@ function drawMapBase() {
   ctx.beginPath();
   ctx.arc(toPx(46), toPx(-30), (9 / EXT) * S / 2, 0, Math.PI * 2);
   ctx.fill();
-  // buildings
+  // buildings & POIs
   for (const b of G.world.buildings) {
-    ctx.fillStyle = b.table === 'medical' ? '#c04840' : '#3d3a34';
-    ctx.fillRect(toPx(b.x) - 3, toPx(b.z) - 3, 6, 6);
+    if (b.mil) { ctx.fillStyle = '#4a563e'; ctx.fillRect(toPx(b.x) - 9, toPx(b.z) - 4, 18, 8); }
+    else { ctx.fillStyle = b.table === 'medical' ? '#c04840' : '#3d3a34'; ctx.fillRect(toPx(b.x) - 3, toPx(b.z) - 3, 6, 6); }
   }
-  // military tents
-  ctx.fillStyle = '#4a563e';
-  ctx.fillRect(toPx(-70) - 5, toPx(-90) - 4, 24, 8);
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 1;
   ctx.font = 'bold 14px sans-serif';

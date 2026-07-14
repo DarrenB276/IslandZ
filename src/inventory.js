@@ -25,7 +25,7 @@ const inRect = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.
 
 const SLOT_ORDER = [
   ['head', 'HEAD'], ['mask', 'MASK'], ['top', 'TOP'], ['vest', 'VEST'],
-  ['gloves', 'GLOVES'], ['belt', 'BELT'], ['pants', 'PANTS'], ['back', 'BACK'],
+  ['gloves', 'GLOVES'], ['belt', 'BELT'], ['pants', 'PANTS'], ['feet', 'FEET'], ['back', 'BACK'],
   ['hands', 'HANDS'], ['shoulder', 'SHOULDER'],
 ];
 
@@ -179,8 +179,8 @@ export class Inventory {
         <rect x="52" y="88" width="17" height="42" rx="5" fill="${pants}"/>
         <rect x="32" y="130" width="15" height="36" rx="5" fill="${pants}"/>
         <rect x="53" y="130" width="15" height="36" rx="5" fill="${pants}"/>
-        <rect x="31" y="164" width="17" height="8" rx="3" fill="#33302a"/>
-        <rect x="52" y="164" width="17" height="8" rx="3" fill="#33302a"/>
+        <rect x="30" y="163" width="19" height="9" rx="3" fill="${e.feet ? hex(e.feet.def.color) : '#33302a'}"/>
+        <rect x="51" y="163" width="19" height="9" rx="3" fill="${e.feet ? hex(e.feet.def.color) : '#33302a'}"/>
       </svg>`;
 
     const stat = (key, val, warn, bad, suffix = '%') => {

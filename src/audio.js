@@ -58,11 +58,16 @@ function tone(freq, dur, peak, type = 'sine', slideTo) {
 }
 
 export const SFX = {
-  shot(kind) {
+  shot(kind, vol = 1) {
     if (!ctx) return;
-    if (kind === 'shotgun') { burst(0.28, 0.9, 900); burst(0.14, 0.6, 2600, 'bandpass'); }
-    else if (kind === 'sniper') { burst(0.4, 0.95, 700); tone(120, 0.3, 0.4, 'triangle', 40); }
-    else { burst(0.14, 0.8, 1800); tone(180, 0.08, 0.3, 'square', 60); }
+    if (vol < 0.5) {
+      // suppressed: soft thump + mechanical click, no crack
+      burst(0.09, 0.28 * vol + 0.12, 700); tone(220, 0.05, 0.12, 'square');
+      return;
+    }
+    if (kind === 'shotgun') { burst(0.28, 0.9 * vol, 900); burst(0.14, 0.6 * vol, 2600, 'bandpass'); }
+    else if (kind === 'sniper') { burst(0.4, 0.95 * vol, 700); tone(120, 0.3, 0.4 * vol, 'triangle', 40); }
+    else { burst(0.14, 0.8 * vol, 1800); tone(180, 0.08, 0.3 * vol, 'square', 60); }
   },
   dryFire() { tone(1200, 0.04, 0.15, 'square'); },
   reload() { tone(700, 0.05, 0.2, 'square'); setTimeout(() => tone(500, 0.06, 0.2, 'square'), 140); },
