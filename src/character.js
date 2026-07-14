@@ -160,16 +160,41 @@ export function setBoots(rig, def) {
   rig.footR.material.color.setHex(c);
 }
 
-// first-person: keep the lower body (hips, legs, feet) so the player sees their legs/boots
-// when looking down, but hide the parts that would fill the camera (head, neck, torso, arms).
+// first-person: show the real torso + legs (so you see your body/chest/legs when you look down),
+// but hide the head and the real arms/held-weapon — the viewmodel provides the arms + gun in view.
 export function setFirstPersonBody(rig, on) {
   rig.headG.visible = !on;
   rig.neck.visible = !on;
-  rig.torso.visible = !on;
   rig.armL.visible = !on;
   rig.armR.visible = !on;
+  rig.torso.visible = true;
   rig.vestMesh.visible = on ? false : !!rig.vestMesh.userData.want;
-  if (rig.weaponMesh) rig.weaponMesh.visible = !on; // the FPP viewmodel shows the weapon instead
+  if (rig.weaponMesh) rig.weaponMesh.visible = !on; // viewmodel shows the weapon in FPP
+}
+
+// viewmodel arms: two forearms + hands gripping the weapon, modeled in the weapon's local space
+// so they track the weapon pose (a classic FPS viewmodel). gripL/gripR come from the weapon def.
+export function createViewmodelArms(gloveColor, sleeveColor, gripL, gripR) {
+  const g = new THREE.Group();
+  const skin = gloveColor ?? 0xd8a583;
+  const sleeve = sleeveColor ?? 0x6b7280;
+  const mkArm = (grip, side) => {
+    const arm = new THREE.Group();
+    // hand at the grip
+    const hand = box(0.1, 0.09, 0.12, skin);
+    hand.position.set(grip.x, grip.y, grip.z);
+    arm.add(hand);
+    // forearm angles back toward the camera (down/back and outward)
+    const fore = box(0.09, 0.09, 0.3, sleeve);
+    fore.position.set(grip.x + side * 0.05, grip.y - 0.07, grip.z + 0.2);
+    fore.rotation.set(-0.7, side * 0.2, side * 0.15);
+    arm.add(fore);
+    return arm;
+  };
+  g.add(mkArm(gripR, 1));   // trigger hand
+  g.add(mkArm(gripL, -1));  // support hand
+  g.traverse((o) => { o.castShadow = false; });
+  return g;
 }
 
 export function setBackpack(rig, def) {
@@ -308,8 +333,17 @@ export function createWeaponMesh(id, attachments) {
     const topY = 0.075, topZ = -0.1, underY = -0.09, underZ = -0.28;
     const optic = attachments.optic;
     if (optic === 'optic_rds') {
-      add(0.045, 0.05, 0.06, dark, 0, topY + 0.02, topZ);
-      add(0.03, 0.03, 0.005, 0xff4433, 0, topY + 0.025, topZ + 0.032);
+      // open red-dot: a ring housing with an additive dot floating on the glass (DayZ-style),
+      // aimed at exactly along the bore so it's a true in-world reticle (no overlay).
+      add(0.05, 0.012, 0.06, dark, 0, topY + 0.05, topZ);       // hood top
+      add(0.012, 0.05, 0.012, dark, -0.03, topY + 0.03, topZ);  // side posts
+      add(0.012, 0.05, 0.012, dark, 0.03, topY + 0.03, topZ);
+      const glass = add(0.05, 0.05, 0.004, 0x0a0f0a, 0, topY + 0.03, topZ);
+      glass.material.transparent = true; glass.material.opacity = 0.35;
+      g.userData.reticle = makeReticle(0xff3322, 'dot');
+      g.userData.reticle.position.set(0, topY + 0.03, topZ - 0.002);
+      g.add(g.userData.reticle);
+      g.userData.aimLocal = new THREE.Vector3(0, topY + 0.03, topZ); // eye lines up here when ADS
     } else if (optic === 'optic_acog') {
       add(0.05, 0.055, 0.14, dark, 0, topY + 0.025, topZ);
       add(0.035, 0.035, 0.01, 0x88c0d8, 0, topY + 0.025, topZ - 0.075);
@@ -354,12 +388,38 @@ export function createWeaponMesh(id, attachments) {
     }
   }
 
-  // record the barrel-tip (most -Z point) so bullets can leave the muzzle
+  // record the barrel-tip (most -Z point) so bullets can leave the muzzle, plus hand grip points
   if (isGunId(id)) {
     const bb = new THREE.Box3().setFromObject(g);
     g.userData.muzzleLocal = new THREE.Vector3(0, (bb.min.y + bb.max.y) / 2 + 0.02, bb.min.z + 0.02);
+    g.userData.gripR = new THREE.Vector3(0, -0.055, 0.05);                    // trigger hand
+    const foreZ = id === 'vs98' ? -0.32 : id === 'm249' ? -0.34 : -0.26;
+    g.userData.gripL = new THREE.Vector3(0, -0.05, foreZ);                    // support hand
+    if (!g.userData.aimLocal) g.userData.aimLocal = new THREE.Vector3(0, 0.06, -0.05); // iron sights
   }
   return g;
+}
+
+// small billboarded additive reticle for holographic/red-dot optics
+function makeReticle(color, kind) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  if (kind === 'dot') {
+    const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 10);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.4, 'rgba(255,60,40,1)');
+    grd.addColorStop(1, 'rgba(255,60,40,0)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(32, 32, 10, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, color, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true,
+  }));
+  sp.scale.setScalar(0.05);
+  sp.renderOrder = 999;
+  return sp;
 }
 
 function isGunId(id) {

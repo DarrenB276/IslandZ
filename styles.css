@@ -85,6 +85,7 @@ svg { fill: currentColor; }
 #right-controls { position: absolute; right: calc(8px + var(--safe-r)); bottom: calc(14px + var(--safe-b));
   width: clamp(190px, 34vmin, 280px); height: clamp(210px, 38vmin, 300px); }
 #btn-fire   { position: absolute; right: clamp(56px, 11vmin, 92px); bottom: clamp(40px, 9vmin, 80px); }
+#btn-hipfire{ position: absolute; right: clamp(4px, 1vmin, 10px); bottom: clamp(44px, 10vmin, 88px); }
 #btn-aim    { position: absolute; right: 4px; bottom: clamp(112px, 23vmin, 190px); }
 #btn-jump   { position: absolute; right: clamp(132px, 25vmin, 210px); bottom: clamp(6px, 2vmin, 20px); }
 #btn-reload { position: absolute; right: clamp(66px, 13vmin, 108px); bottom: clamp(150px, 30vmin, 250px); }

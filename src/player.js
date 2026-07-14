@@ -291,15 +291,30 @@ export class Player {
     if (this.speed > 0.5) spread *= 1.6;
     if (this.painkiller > 0) spread *= 0.7;
 
+    // ballistics per weapon class: muzzle velocity (m/s) + gravity drop scale
+    const BAL = {
+      shotgun: { vel: 400, drop: 1.1 }, sniper: { vel: 850, drop: 0.5 },
+      lmg: { vel: 760, drop: 0.7 }, rifle: { vel: 720, drop: 0.7 }, smg: { vel: 400, drop: 1 },
+    };
+    const cls = w.def.pellets ? 'shotgun' : w.def.scoped ? 'sniper' : w.def.id === 'm249' ? 'lmg'
+      : w.def.id === 'mp5' ? 'smg' : 'rifle';
+    const bal = BAL[cls];
     for (let i = 0; i < shots; i++) {
       const d = dir.clone();
       d.x += (Math.random() - 0.5) * spread * 2;
       d.y += (Math.random() - 0.5) * spread * 2;
       d.z += (Math.random() - 0.5) * spread * 2;
       d.normalize();
-      this.fireRay(muzzle, d, w.def.dmg);
+      G.bullets.spawn(muzzle, d, { dmg: w.def.dmg, vel: bal.vel, drop: bal.drop });
     }
-    this.recoil = Math.min(0.6, this.recoil + (kind === 'shotgun' ? 0.3 : kind === 'sniper' ? 0.45 : 0.09));
+
+    // recoil: vertical camera kick + horizontal muzzle climb pattern (less when aimed/braced)
+    const brace = (G.controls.aim ? 0.55 : 1) * (this.stance === 'prone' ? 0.4 : this.stance === 'crouch' ? 0.7 : 1)
+      * (w.attachments?.under === 'grip_foregrip' ? 0.8 : 1);
+    const vKick = (kind === 'shotgun' ? 0.34 : kind === 'sniper' ? 0.5 : cls === 'lmg' ? 0.14 : 0.1) * brace;
+    this.recoil = Math.min(0.7, this.recoil + vKick);
+    G.controls.camPitch = Math.max(-0.5, G.controls.camPitch - vKick * 0.18);   // muzzle climbs
+    G.controls.camYaw += (Math.random() - 0.5) * vKick * 0.5;                     // lateral wander
     G.hud.refreshWeapon();
   }
 
@@ -557,7 +572,7 @@ export class Player {
       this.reloading -= dt;
       if (this.reloading <= 0) { this.reloading = 0; this.finishReload(); }
     }
-    if (G.controls.firing) this.pullTrigger();
+    if (G.controls.firing || G.controls.hipFiring) this.pullTrigger();
     else this.triggerHeld = false;
     this.recoil = Math.max(0, this.recoil - dt * 2.2);
 
@@ -621,19 +636,21 @@ export class Player {
       // water is walkable/swimmable now — only trees & walls (colliders) still block
       this.pos.x = fixed.x; this.pos.z = fixed.z;
 
-      // face movement direction (or camera when aiming / in first person)
-      const face = (c.aim || G.view === 'fpp') ? c.camYaw : wishYaw;
+      // when shooting/aiming/first-person, face where the camera (crosshair) points —
+      // otherwise face the movement direction. Fixes facing wrong while walking backwards & firing.
+      const combatFacing = c.aim || c.firing || c.hipFiring || G.view === 'fpp';
+      const face = combatFacing ? c.camYaw : wishYaw;
       let d = face - this.yaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      this.yaw += d * Math.min(1, dt * 10);
+      this.yaw += d * Math.min(1, dt * (combatFacing ? 14 : 10));
     } else {
       this.speed = THREE.MathUtils.lerp(this.speed, 0, Math.min(1, dt * 10));
-      if (c.aim || G.view === 'fpp') {
+      if (c.aim || c.firing || c.hipFiring || G.view === 'fpp') {
         let d = c.camYaw - this.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
-        this.yaw += d * Math.min(1, dt * 10);
+        this.yaw += d * Math.min(1, dt * 14);
       }
     }
     this.moveState = this.swimming ? 'swim' : this.grounded ? anim : 'jump';

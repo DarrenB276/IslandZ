@@ -10,6 +10,7 @@ export class Controls {
     this.sprint = false;
     this.aim = false;
     this.firing = false;
+    this.hipFiring = false;
     this.enabled = false;
     this.handlers = {};             // fire, jump, reload, crouch, prone, interact, inventory, swap, aim
 
@@ -127,6 +128,7 @@ export class Controls {
     };
     press('btn-fire', () => { this.firing = true; this.emit('fire', true); },
       () => { this.firing = false; this.emit('fire', false); });
+    press('btn-hipfire', () => { this.hipFiring = true; }, () => { this.hipFiring = false; });
     press('btn-aim', (el) => { this.aim = !this.aim; el.classList.toggle('active', this.aim); this.emit('aim', this.aim); });
     press('btn-jump', () => this.emit('jump'));
     press('btn-reload', () => this.emit('reload'));

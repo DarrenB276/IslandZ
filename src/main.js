@@ -12,7 +12,8 @@ import { Inventory } from './inventory.js';
 import { HUD } from './hud.js';
 import { DevMode } from './dev.js';
 import { Settings } from './settings.js';
-import { createWeaponMesh, setFirstPersonBody } from './character.js';
+import { Bullets } from './bullets.js';
+import { createWeaponMesh, setFirstPersonBody, createViewmodelArms } from './character.js';
 import { initAudio } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -37,6 +38,7 @@ G.world = new World(scene);
 G.controls = new Controls();
 G.player = new Player(G);
 G.zombies = new Zombies(G);
+G.bullets = new Bullets(G);
 G.hud = new HUD(G);
 G.inventory = new Inventory(G);
 G.dev = new DevMode(G);
@@ -72,11 +74,18 @@ function refreshViewmodel() {
   if (!w) return;
   vmMesh = createWeaponMesh(w.def.id, w.attachments);
   vmMesh.traverse((o) => { o.castShadow = false; }); // don't catch the sun-shadow camera
+  // modeled arms gripping the weapon (so FPP shows your arms holding the gun)
+  if (w.def.cat === 'weapon' && vmMesh.userData.gripL) {
+    const e = G.player.equipment;
+    const glove = e.gloves?.def.color ?? 0xd8a583;
+    const sleeve = e.top?.def.color ?? 0xc8b8a0;
+    vmMesh.add(createViewmodelArms(glove, sleeve, vmMesh.userData.gripL, vmMesh.userData.gripR));
+  }
   viewmodel.add(vmMesh);
 }
 G.onWeaponVisualChanged = () => { viewmodelSig = '~'; }; // force rebuild next frame
 
-// world-space barrel tip of whichever weapon mesh is currently shown (FPP viewmodel or TPP rig)
+// world-space barrel tip of whichever weapon mesh is shown (FPP viewmodel or TPP rig weapon)
 const _muzzleTmp = new THREE.Vector3();
 G.getMuzzleWorld = () => {
   const fpp = G.view === 'fpp' && !G.player.dead;
@@ -90,9 +99,9 @@ G.getMuzzleWorld = () => {
 
 // FPP weapon poses: idle tactical hold / hip-fire / ADS
 const VM_POSES = {
-  idle: { pos: [0.27, -0.3, -0.46], rot: [0.32, 0.32, 0.06] },   // low ready, angled in
-  hip: { pos: [0.24, -0.24, -0.52], rot: [0.02, 0.05, 0] },
-  ads: { pos: [0, -0.155, -0.4], rot: [0, 0, 0] },
+  idle: { pos: [0.24, -0.28, -0.5], rot: [0.18, 0.28, 0.05] },   // patrol/ready, angled in
+  hip: { pos: [0.2, -0.24, -0.55], rot: [0.02, 0.05, 0] },
+  ads: { pos: [0, -0.108, -0.34], rot: [0, 0, 0] },              // sight raised to eye centre
   melee: { pos: [0.3, -0.34, -0.5], rot: [0.5, 0, -0.25] },
 };
 let lastFireInput = -10;
@@ -138,19 +147,17 @@ function updateCamera(dt) {
   const yaw = c.camYaw;
   const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-  // in FPP the body stays visible (DayZ-style) but head/arms are hidden so they don't block the view
+  // FPP: viewmodel arms+weapon in view, real torso+legs visible below (look down to see your body)
   p.rig.group.visible = true;
   setFirstPersonBody(p.rig, fpp);
-  viewmodel.visible = fpp && !(w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming);
+  const scopedADS = w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming;
+  viewmodel.visible = fpp && !scopedADS; // long-range scope uses the overlay, hide the model then
 
   if (fpp) {
     const eyeY = p.pos.y + (p.swimming ? 1.15 : (EYE[p.stance] ?? 1.58)) + (p.climbT >= 0 ? 0.2 : 0);
-    // camera at the head, nudged back a touch so the torso/legs are visible below (DayZ-style)
-    const bx = Math.sin(yaw) * 0.16, bz = Math.cos(yaw) * 0.16; // horizontal back-offset
-    camera.position.set(p.pos.x + bx, eyeY, p.pos.z + bz);
+    camera.position.set(p.pos.x, eyeY, p.pos.z); // at the eyes
     camera.lookAt(camera.position.clone().add(fwd));
     updateViewmodelPose(dt);
-    // sway/bob layered on top of the pose
     const bob = Math.sin(performance.now() * 0.008) * Math.min(1, p.speed / 3) * 0.012;
     viewmodel.position.set(0, bob, p.recoil * 0.12);
     return;
@@ -188,11 +195,21 @@ G.controls.on('prone', () => { if (!G.paused) G.player.cycleStance('prone'); });
 G.controls.on('swap', () => { if (!G.paused) G.player.swapWeapon(); });
 G.controls.on('quick', (i) => { if (!G.paused && !G.inventory.isOpen && started) G.player.quickUse(i); });
 G.controls.on('menu', () => { if (started && !G.inventory.isOpen) G.settings.toggle(); });
+let userView = 'tpp'; // the view the player chose; ADS forces fpp then restores this
 G.controls.on('view', () => {
   if (G.paused) return;
   G.view = G.view === 'tpp' ? 'fpp' : 'tpp';
+  userView = G.view;
   document.getElementById('btn-view').classList.toggle('active', G.view === 'fpp');
   G.hud.toast(G.view === 'fpp' ? 'First person' : 'Third person');
+});
+// aiming down sights snaps to first person; releasing aim restores the chosen view.
+// Hip fire (separate button) never forces first person.
+G.controls.on('aim', (on) => {
+  if (G.paused) return;
+  if (on) { userView = G.view; G.view = 'fpp'; }
+  else { G.view = userView; }
+  document.getElementById('btn-view').classList.toggle('active', G.view === 'fpp');
 });
 G.controls.on('inventory', () => {
   if (G.paused) return;
@@ -352,6 +369,7 @@ function loop() {
       G.player.speed = 0;
     }
     G.zombies.update(dt, elapsed);
+    G.bullets.update(dt);
     G.world.update(dt, elapsed, G.player.pos, camera.position);
     updateCamera(dt);
     updateInteractPrompt(dt);
