@@ -127,6 +127,32 @@ export class Inventory {
     this.renderEquipment();
     this.renderContainers();
     this.renderVicinity();
+    this.renderQuickslots();
+  }
+
+  // quickslot bar inside the inventory: drag an item onto a slot to assign it
+  renderQuickslots() {
+    const wrap = document.getElementById('inv-quickslots');
+    wrap.innerHTML = '';
+    this.qslotEls = [];
+    const slots = this.G.hud.quickState();
+    slots.forEach((s, i) => {
+      const el = document.createElement('div');
+      el.className = 'qslot';
+      el.innerHTML = `<span class="q-num">${i + 1}</span>` +
+        (s ? `<span class="q-icon">${s.inst.def.icon}</span><span class="q-label">${s.inst.def.name}</span>` : '');
+      if (s) {
+        el.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          this.G.player.quickslots[i] = null; // tap a filled slot to unassign
+          this.render();
+          this.G.hud.renderQuickslots(true);
+          SFX.click();
+        });
+      }
+      wrap.appendChild(el);
+      this.qslotEls.push(el);
+    });
   }
 
   // build a DOM grid for any container and register it for drag hit-testing
@@ -297,7 +323,7 @@ export class Inventory {
 
   clearHighlights() {
     document.querySelectorAll('.cell-hl').forEach((n) => n.remove());
-    document.querySelectorAll('.equip-slot.drop-ok, .equip-slot.drop-bad')
+    document.querySelectorAll('.equip-slot.drop-ok, .equip-slot.drop-bad, .qslot.drop-ok')
       .forEach((n) => n.classList.remove('drop-ok', 'drop-bad'));
     document.getElementById('inv-vicinity').classList.remove('drop-ok');
     this.ghost.classList.remove('bad');
@@ -322,6 +348,12 @@ export class Inventory {
       const r = slotEl.getBoundingClientRect();
       if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
         return { kind: 'slot', slot: slotEl.dataset.slot, slotEl };
+      }
+    }
+    for (let i = 0; i < (this.qslotEls?.length ?? 0); i++) {
+      const r = this.qslotEls[i].getBoundingClientRect();
+      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
+        return { kind: 'quick', index: i, el: this.qslotEls[i] };
       }
     }
     const vic = document.getElementById('inv-vicinity');
@@ -359,6 +391,10 @@ export class Inventory {
     } else if (hit.kind === 'slot') {
       const ok = this.slotAccepts(hit.slot, d.inst);
       hit.slotEl.classList.add(ok ? 'drop-ok' : 'drop-bad');
+      this.ghost.classList.toggle('bad', !ok);
+    } else if (hit.kind === 'quick') {
+      const ok = d.src.type !== 'ground';
+      hit.el.classList.toggle('drop-ok', ok);
       this.ghost.classList.toggle('bad', !ok);
     } else if (hit.kind === 'vicinity') {
       document.getElementById('inv-vicinity').classList.add('drop-ok');
@@ -416,6 +452,12 @@ export class Inventory {
           if (prev) this.stashOrDrop(prev);
         }
         done = true;
+      } else if (hit.kind === 'quick') {
+        // assign to quickslot: item stays where it is, the slot just references it
+        if (d.src.type !== 'ground') {
+          p.assignQuickslot(hit.index, d.inst);
+          done = true;
+        } else this.G.hud.toast('Take the item first to assign it');
       } else if (hit.kind === 'vicinity') {
         if (d.src.type !== 'ground') {
           this.removeFromSource(d);

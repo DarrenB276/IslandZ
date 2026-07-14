@@ -11,6 +11,7 @@ import { Controls } from './controls.js';
 import { Inventory } from './inventory.js';
 import { HUD } from './hud.js';
 import { DevMode } from './dev.js';
+import { Settings } from './settings.js';
 import { createWeaponMesh } from './character.js';
 import { initAudio } from './audio.js';
 
@@ -28,8 +29,8 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 
 // central game context shared by all systems
 const G = { scene, camera, renderer, world: null, player: null, zombies: null,
-  controls: null, inventory: null, hud: null, dev: null, view: 'tpp',
-  onPlayerDeath: null, onInventoryClosed: null, setPost: null };
+  controls: null, inventory: null, hud: null, dev: null, settings: null, view: 'tpp',
+  paused: false, onPlayerDeath: null, onInventoryClosed: null, setPost: null };
 window.G = G; // debug handle
 
 G.world = new World(scene);
@@ -50,6 +51,7 @@ composer.addPass(bloom);
 composer.addPass(new OutputPass());
 let postEnabled = true;
 G.setPost = (v) => { postEnabled = v; };
+G.settings = new Settings(G);
 
 // auto-disable post FX if the device can't keep up
 let fpsAcc = 0, fpsN = 0, fpsGraceT = 0;
@@ -136,17 +138,21 @@ function updateCamera(dt) {
 }
 
 // ================= control events =================
-G.controls.on('jump', () => G.player.jump());
-G.controls.on('reload', () => G.player.reload());
-G.controls.on('crouch', () => G.player.cycleStance('crouch'));
-G.controls.on('prone', () => G.player.cycleStance('prone'));
-G.controls.on('swap', () => G.player.swapWeapon());
+G.controls.on('jump', () => { if (!G.paused) G.player.jump(); });
+G.controls.on('reload', () => { if (!G.paused) G.player.reload(); });
+G.controls.on('crouch', () => { if (!G.paused) G.player.cycleStance('crouch'); });
+G.controls.on('prone', () => { if (!G.paused) G.player.cycleStance('prone'); });
+G.controls.on('swap', () => { if (!G.paused) G.player.swapWeapon(); });
+G.controls.on('quick', (i) => { if (!G.paused && !G.inventory.isOpen && started) G.player.quickUse(i); });
+G.controls.on('menu', () => { if (started && !G.inventory.isOpen) G.settings.toggle(); });
 G.controls.on('view', () => {
+  if (G.paused) return;
   G.view = G.view === 'tpp' ? 'fpp' : 'tpp';
   document.getElementById('btn-view').classList.toggle('active', G.view === 'fpp');
   G.hud.toast(G.view === 'fpp' ? 'First person' : 'Third person');
 });
 G.controls.on('inventory', () => {
+  if (G.paused) return;
   G.inventory.toggle();
   syncOverlays();
 });
@@ -156,6 +162,7 @@ function syncOverlays() {
   G.controls.enabled = !G.inventory.isOpen && started && !G.player.dead;
 }
 G.controls.on('interact', () => {
+  if (G.paused) return;
   const near = G.world.itemsNear(G.player.pos, 2.2);
   if (!near.length) return;
   const { gi } = near[0];
@@ -223,7 +230,9 @@ function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
   elapsed += dt;
-  if (started) {
+  if (started && G.paused) {
+    // menu open: freeze the world, keep rendering
+  } else if (started) {
     G.controls.poll();
     if (!G.inventory.isOpen) {
       G.player.update(dt);
@@ -243,7 +252,12 @@ function loop() {
     if (fpsGraceT > 6 && postEnabled) {
       fpsAcc += dt; fpsN++;
       if (fpsN >= 90) {
-        if (fpsAcc / fpsN > 1 / 26) { postEnabled = false; G.dev.post = false; G.hud.toast('Post FX off (performance)'); }
+        if (fpsAcc / fpsN > 1 / 26) {
+          postEnabled = false;
+          G.settings.data.post = false;
+          G.settings.save();
+          G.hud.toast('Post FX off (performance)');
+        }
         fpsAcc = 0; fpsN = 0;
       }
     }

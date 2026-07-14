@@ -48,6 +48,7 @@ export class Player {
     // ---- equipment ----
     this.equipment = { head: null, mask: null, top: null, vest: null, gloves: null,
       belt: null, pants: null, back: null, hands: null, shoulder: null };
+    this.quickslots = new Array(10).fill(null); // item uids
 
     // ---- weapon state ----
     this.fireCooldown = 0;
@@ -121,6 +122,70 @@ export class Player {
   }
 
   get weapon() { return this.equipment.hands; }
+
+  // find an item anywhere on the character (pockets, hands, shoulder, worn)
+  findItemByUid(uid) {
+    for (const c of this.containers()) {
+      for (const it of c.grid.items) if (it.uid === uid) return { inst: it, grid: c.grid };
+    }
+    for (const [slot, it] of Object.entries(this.equipment)) {
+      if (it && it.uid === uid) return { inst: it, slot };
+    }
+    return null;
+  }
+
+  // ---- quickslots ----
+  assignQuickslot(i, inst) {
+    // one slot per item: clear duplicates first
+    for (let k = 0; k < this.quickslots.length; k++) {
+      if (this.quickslots[k] === inst.uid) this.quickslots[k] = null;
+    }
+    this.quickslots[i] = inst.uid;
+    this.G.hud.renderQuickslots(true);
+  }
+
+  quickUse(i) {
+    if (this.dead) return;
+    const uid = this.quickslots[i];
+    if (!uid) return;
+    const found = this.findItemByUid(uid);
+    if (!found) { this.quickslots[i] = null; this.G.hud.renderQuickslots(true); return; }
+    const { inst, grid, slot } = found;
+    const d = inst.def;
+    const inv = this.G.inventory;
+
+    const takeOut = () => {
+      if (grid) { const k = grid.items.indexOf(inst); if (k >= 0) grid.items.splice(k, 1); }
+      else if (slot) this.equipment[slot] = null;
+    };
+
+    if (d.cat === 'weapon' || d.cat === 'melee') {
+      if (this.equipment.hands === inst) {
+        // tapping the held weapon lowers it
+        this.equipment.hands = null;
+        if (d.long && !this.equipment.shoulder) this.equipment.shoulder = inst;
+        else if (!inv.autoStash(inst)) inv.dropAtFeet(inst);
+        this.applyLook();
+      } else {
+        takeOut();
+        const prev = this.equip(inst);
+        if (prev) inv.stashOrDrop(prev);
+      }
+    } else if (d.cat === 'food' || d.cat === 'drink') {
+      const gone = this.consume(inst);
+      if (gone) { takeOut(); this.quickslots[i] = null; }
+    } else if (d.cat === 'medical') {
+      const gone = this.useMedical(inst);
+      if (gone) { takeOut(); this.quickslots[i] = null; }
+    } else if (d.cat === 'clothing') {
+      takeOut();
+      const prev = this.equip(inst);
+      if (prev) inv.stashOrDrop(prev);
+    } else return;
+
+    this.G.hud.refreshWeapon();
+    if (inv.isOpen) inv.render();
+  }
 
   swapWeapon() {
     if (this.reloading > 0 || this.climbT >= 0) return;

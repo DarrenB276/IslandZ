@@ -6,6 +6,7 @@ export class Controls {
     this.mag = 0;
     this.camYaw = Math.PI;
     this.camPitch = 0.18;
+    this.sensMul = 1;               // look sensitivity from settings
     this.sprint = false;
     this.aim = false;
     this.firing = false;
@@ -84,7 +85,7 @@ export class Controls {
       if (e.pointerId !== this.lookId) return;
       const dx = e.clientX - this.lookLast.x, dy = e.clientY - this.lookLast.y;
       this.lookLast.x = e.clientX; this.lookLast.y = e.clientY;
-      const sens = (this.aim ? 0.0035 : 0.006) * (600 / Math.min(window.innerWidth, 900));
+      const sens = (this.aim ? 0.0035 : 0.006) * (600 / Math.min(window.innerWidth, 900)) * this.sensMul;
       this.camYaw -= dx * sens * (window.innerWidth > 700 ? 1 : 1.4);
       this.camPitch += dy * sens;
       this.clampPitch();
@@ -114,7 +115,10 @@ export class Controls {
   bindButtons() {
     const press = (id, down, up) => {
       const el = document.getElementById(id);
-      el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); down(el); }, { passive: false });
+      el.addEventListener('pointerdown', (e) => {
+        if (document.body.classList.contains('hud-editing')) return; // HUD edit mode owns the pointer
+        e.preventDefault(); e.stopPropagation(); down(el);
+      }, { passive: false });
       if (up) {
         el.addEventListener('pointerup', () => up(el));
         el.addEventListener('pointercancel', () => up(el));
@@ -132,6 +136,7 @@ export class Controls {
     press('btn-inventory', () => this.emit('inventory'));
     press('btn-swap', () => this.emit('swap'));
     press('btn-view', () => this.emit('view'));
+    press('btn-menu', () => this.emit('menu'));
     press('btn-interact', () => this.emit('interact'));
   }
 
@@ -158,6 +163,11 @@ export class Controls {
         case 'Tab': case 'KeyI': this.emit('inventory'); e.preventDefault(); break;
         case 'KeyX': this.emit('swap'); break;
         case 'KeyV': this.emit('view'); break;
+        case 'Escape': this.emit('menu'); break;
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
+        case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0':
+          this.emit('quick', e.code === 'Digit0' ? 9 : parseInt(e.code.slice(5), 10) - 1);
+          break;
       }
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -175,7 +185,7 @@ export class Controls {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement !== canvas) return;
-      const sens = this.aim ? 0.0012 : 0.0022;
+      const sens = (this.aim ? 0.0012 : 0.0022) * this.sensMul;
       this.camYaw -= e.movementX * sens;
       this.camPitch += e.movementY * sens;
       this.clampPitch();

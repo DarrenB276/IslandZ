@@ -10,7 +10,6 @@ export class DevMode {
     this.enabled = false;
     this.god = false;
     this.speed = false;
-    this.post = true;                 // post-processing toggle lives here too
     this.panel = document.getElementById('dev-panel');
     this.badge = document.getElementById('dev-badge');
     this.taps = [];
@@ -66,7 +65,6 @@ export class DevMode {
       ['Speed ×3', () => this.speed, (v) => { this.speed = v; }],
       ['Infinite Stamina', () => this.G.player.adrenaline > 1e5, (v) => { this.G.player.adrenaline = v ? 1e9 : 0; }],
       ['Pause Time', () => this.G.world.timePaused, (v) => { this.G.world.timePaused = v; }],
-      ['Post FX (bloom)', () => this.post, (v) => { this.post = v; this.G.setPost?.(v); }],
     ];
     const wrap = document.getElementById('dev-toggles');
     wrap.innerHTML = '';

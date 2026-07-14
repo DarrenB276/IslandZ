@@ -31,12 +31,31 @@ Open `http://localhost:8080` — on a phone, add the device's LAN address instea
 | Bag icon | Tab or I | Tetris inventory |
 | ⇄ icon | X | Swap hands ↔ shoulder weapon |
 | 👁 icon | V | Toggle first / third person |
+| ☰ icon (top-left) | Esc | Pause menu: Resume / Settings / Exit |
+| Quickslot bar | 1-0 | Use / equip the assigned item |
 | TAKE prompt | F | Pick up nearby item |
+
+## Game options
+
+The ☰ button (top-left) pauses the game and opens **Resume / Settings / Exit**. Settings has:
+
+- **Post processing** (bloom) on/off
+- **Look sensitivity** and **master volume** sliders
+- **Quickslot count** — 5 by default, up to 10 if the screen is wide enough
+- **Customize HUD** — drag any control to reposition it, tap to select, then resize and change
+  opacity with sliders. Layout persists in your browser; one-tap reset available.
+
+## Quickslots
+
+Drag an item from a pocket grid onto the quickslot bar at the bottom of the inventory to assign it
+(the item stays in its pocket — the slot is a shortcut). Tap a slot in-game to equip the weapon,
+eat/drink the food, or use the medical item. Tapping the slot of the weapon you're holding lowers it.
+Tap a filled slot inside the inventory to unassign.
 
 ## Dev mode
 
 Tap the **INVENTORY title 5 times quickly** (or open the game with `?dev=1`) to toggle dev mode.
-The panel offers **god mode, ×3 speed, infinite stamina, time-of-day slider / pause, post-FX toggle**,
+The panel offers **god mode, ×3 speed, infinite stamina, time-of-day slider / pause**,
 and a **spawn list of every registered item**. The red button at the bottom of the panel (or another
 5 taps on the title) disables it.
 
@@ -54,7 +73,7 @@ and a **spawn list of every registered item**. The red button at the bottom of t
 
 **Player** — idle / walk / jog / run / crouch / prone / jump / **climb** with procedural animation on a low-poly rig. Stamina-gated sprinting, jumping and climbing.
 
-**Stats** — Health, Blood level, Hunger, Thirst, Stamina, Temperature — with DayZ-style colour-graded HUD icons.
+**Stats** — Health, Blood level, Hunger, Thirst, Stamina, Temperature. Stat icons **drain visually** — the icon empties from the top as the stat drops (75% filled, 50% filled, …) and pulses red when critical. Temperature is colour-coded instead: freezing / cold / normal / warm / hot.
 
 **Medical / sickness** — bleeding wounds (bandage or rags), **cholera** from bad food/water (charcoal tabs), **wound infection** (tetracycline, prevent with disinfectant), **fever** (raises temperature, drains food & water faster, tires you quickly), saline IV to restore blood, painkillers, and the **adrenaline injector** (30s of unlimited stamina). Active conditions show as status icons.
 

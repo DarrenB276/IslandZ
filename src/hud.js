@@ -1,4 +1,4 @@
-// ================= HUD: stat icons, status effects, weapon info, screen FX =================
+// ================= HUD: degrading stat icons, status effects, quickslots, weapon info =================
 
 const SVG = {
   bleed: '<svg viewBox="0 0 24 24"><path d="M12 2s7 8.1 7 13a7 7 0 0 1-14 0c0-4.9 7-13 7-13z"/></svg>',
@@ -8,15 +8,20 @@ const SVG = {
   adren: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
 };
 
+// stat icon paths (shared between the dim silhouette and the clipped fill layer)
+const STAT_PATHS = {
+  hp: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z"/>',
+  blood: '<path d="M12 2s7 8.1 7 13a7 7 0 0 1-14 0c0-4.9 7-13 7-13z"/>',
+  food: '<path d="M15.5 2c2.5 0 6.5 4 6.5 6.5 0 1.9-1.6 3.5-3.5 3.5-.9 0-1.8-.4-2.4-1L9.9 17.2a2.5 2.5 0 1 1-3.1-3.1L13 7.9c-.6-.6-1-1.5-1-2.4C12 3.6 13.6 2 15.5 2zM5 18a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>',
+  water: '<path d="M10 2h4v3h1v3.2c1.8 1 3 2.9 3 5V19a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3v-5.8c0-2.1 1.2-4 3-5V5h1V2z"/>',
+  temp: '<path d="M13 3a2 2 0 0 0-4 0v9.4a4.5 4.5 0 1 0 4 0V3zm-2 16a2.5 2.5 0 0 1-1-4.8V5h2v9.2a2.5 2.5 0 0 1-1 4.8z"/>',
+};
+
 export class HUD {
   constructor(G) {
     this.G = G;
+    this.buildStats();
     this.el = {
-      hp: document.getElementById('stat-hp'),
-      blood: document.getElementById('stat-blood'),
-      food: document.getElementById('stat-food'),
-      water: document.getElementById('stat-water'),
-      temp: document.getElementById('stat-temp'),
       stamina: document.getElementById('stamina-bar'),
       status: document.getElementById('status-icons'),
       wname: document.getElementById('weapon-name'),
@@ -27,13 +32,34 @@ export class HUD {
       crosshair: document.getElementById('crosshair'),
       scope: document.getElementById('scope-overlay'),
       reloadBtn: document.getElementById('btn-reload'),
+      quickslots: document.getElementById('quickslots'),
     };
     this.statusCache = '';
+    this.quickCache = '';
     this.tick = 0;
   }
 
-  grade(v, warn, bad, crit) {
-    return v <= crit ? 'crit' : v <= bad ? 'bad' : v <= warn ? 'warn' : '';
+  buildStats() {
+    const col = document.getElementById('stats-col');
+    col.innerHTML = '';
+    this.stats = {};
+    for (const key of ['hp', 'blood', 'food', 'water', 'temp']) {
+      const el = document.createElement('div');
+      el.className = 'stat';
+      el.innerHTML =
+        `<svg class="stat-bg" viewBox="0 0 24 24">${STAT_PATHS[key]}</svg>` +
+        `<svg class="stat-fill" viewBox="0 0 24 24">${STAT_PATHS[key]}</svg>`;
+      col.appendChild(el);
+      this.stats[key] = { el, fill: el.querySelector('.stat-fill') };
+    }
+  }
+
+  // fill an icon from the bottom to pct (0..1)
+  setFill(key, pct, crit) {
+    const s = this.stats[key];
+    const cut = Math.round((1 - Math.max(0, Math.min(1, pct))) * 100);
+    s.fill.style.clipPath = `inset(${cut}% 0 0 0)`;
+    s.el.classList.toggle('crit', !!crit);
   }
 
   update(dt) {
@@ -42,12 +68,18 @@ export class HUD {
     this.tick = 0.2;
     const p = this.G.player;
 
-    this.el.hp.className = 'stat ' + this.grade(p.hp, 70, 45, 20);
-    this.el.blood.className = 'stat ' + this.grade(p.blood, 4200, 3200, 2200);
-    this.el.food.className = 'stat ' + this.grade(p.food, 45, 25, 10);
-    this.el.water.className = 'stat ' + this.grade(p.water, 45, 25, 10);
+    this.setFill('hp', p.hp / 100, p.hp <= 20);
+    this.setFill('blood', p.blood / 5000, p.blood <= 2200);
+    this.setFill('food', p.food / 100, p.food <= 10);
+    this.setFill('water', p.water / 100, p.water <= 10);
+
+    // temperature: color-coded, always fully filled
     const t = p.temp;
-    this.el.temp.className = 'stat ' + (t >= 38.5 || t <= 35 ? 'crit' : t >= 37.8 || t <= 35.8 ? 'bad' : '');
+    const tEl = this.stats.temp.el;
+    this.stats.temp.fill.style.clipPath = 'inset(0 0 0 0)';
+    tEl.className = 'stat ' + (
+      t <= 35 ? 'temp-freezing' : t <= 35.9 ? 'temp-cold' :
+      t >= 38.4 ? 'temp-hot' : t >= 37.3 ? 'temp-warm' : '');
 
     const stamPct = Math.round(p.stamina) + '%';
     this.el.stamina.style.width = stamPct;
@@ -75,6 +107,41 @@ export class HUD {
     const scoped = !!(w && w.def.scoped && this.G.controls.aim);
     this.el.scope.classList.toggle('on', scoped);
     this.el.crosshair.classList.toggle('hide', scoped || !w || w.def.cat !== 'weapon');
+
+    this.renderQuickslots();
+  }
+
+  // ---------- quickslots ----------
+  quickState() {
+    const p = this.G.player;
+    const n = this.G.settings?.quickCount() ?? 5;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const uid = p.quickslots[i];
+      const found = uid ? p.findItemByUid(uid) : null;
+      out.push(found ? { inst: found.inst, held: p.equipment.hands === found.inst } : null);
+    }
+    return out;
+  }
+
+  renderQuickslots(force) {
+    const slots = this.quickState();
+    const sig = slots.map((s, i) => s ? `${i}:${s.inst.uid}:${s.held ? 1 : 0}` : `${i}:-`).join('|');
+    if (!force && sig === this.quickCache) return;
+    this.quickCache = sig;
+    this.el.quickslots.innerHTML = '';
+    slots.forEach((s, i) => {
+      const el = document.createElement('div');
+      el.className = 'qslot' + (s?.held ? ' held' : '');
+      el.innerHTML = `<span class="q-num">${i + 1}</span>` +
+        (s ? `<span class="q-icon">${s.inst.def.icon}</span><span class="q-label">${s.inst.def.name}</span>` : '');
+      el.addEventListener('pointerdown', (e) => {
+        if (document.body.classList.contains('hud-editing')) return;
+        e.preventDefault(); e.stopPropagation();
+        this.G.player.quickUse(i);
+      });
+      this.el.quickslots.appendChild(el);
+    });
   }
 
   refreshWeapon() {
@@ -92,6 +159,7 @@ export class HUD {
       this.el.wammo.innerHTML = `${w.loaded ?? 0}/${w.def.mag}<span class="mode">${mode}</span>`;
     }
     this.el.reloadBtn.classList.remove('flash');
+    this.renderQuickslots(true);
   }
 
   hitmarker(kill) {

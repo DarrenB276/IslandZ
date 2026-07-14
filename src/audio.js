@@ -1,13 +1,19 @@
 // ================= Procedural WebAudio SFX =================
 let ctx = null;
 let master = null;
+let masterVolume = 0.5;
 
 export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   master = ctx.createGain();
-  master.gain.value = 0.5;
+  master.gain.value = masterVolume;
   master.connect(ctx.destination);
+}
+
+export function setMasterVolume(v) {
+  masterVolume = v;
+  if (master) master.gain.value = v;
 }
 
 function noiseBuffer(dur) {
