@@ -28,6 +28,8 @@ export class DevMode {
 
     document.getElementById('dev-close').addEventListener('click', () => this.panel.classList.remove('open'));
     document.getElementById('dev-disable').addEventListener('click', () => this.disable());
+    // quick-access DEV button inside the inventory header
+    document.getElementById('inv-dev-btn').addEventListener('click', () => this.openPanel());
 
     const slider = document.getElementById('dev-time');
     slider.addEventListener('input', () => {
@@ -44,6 +46,7 @@ export class DevMode {
     this.enabled = true;
     this.badge.classList.add('on');
     this.panel.classList.add('open');
+    document.getElementById('inv-dev-btn').classList.add('on');
     this.sync();
     if (!silent) { SFX.pickup(); this.G.hud.toast('DEV MODE ON — red button in the panel turns it off'); }
   }
@@ -54,6 +57,7 @@ export class DevMode {
     this.speed = false;
     this.badge.classList.remove('on');
     this.panel.classList.remove('open');
+    document.getElementById('inv-dev-btn').classList.remove('on');
     this.G.hud.toast('Dev mode off');
   }
 

@@ -27,6 +27,28 @@ def({ id: 'vaiga', name: 'Vaiga', icon: '𝗩𝗚', w: 5, h: 2, cat: 'weapon', l
 def({ id: 'mp5', name: 'MP5-K', icon: '𝗠𝗣', w: 4, h: 2, cat: 'weapon', long: false,
   ammo: 'ammo_9mm', mag: 30, dmg: 21, rpm: 820, auto: true, spread: 0.03, zoom: 55, noise: 70,
   desc: '9mm submachine gun.' });
+def({ id: 'm249', name: 'M249 SAW', icon: '𝗠𝟮', w: 6, h: 2, cat: 'weapon', long: true,
+  ammo: 'ammo_556', mag: 100, dmg: 30, rpm: 750, auto: true, spread: 0.04, zoom: 50, noise: 110,
+  desc: '5.56 light machine gun. 100-round belt.' });
+
+// ---------- Weapon attachments ----------
+// atype: optic | under | mag · fits: weapon id whitelist (undefined = any gun)
+def({ id: 'optic_rds', name: 'RDS Sight', icon: '🔴', w: 1, h: 1, cat: 'attachment', atype: 'optic',
+  zoom: 48, desc: 'Red dot sight. Fast target acquisition.' });
+def({ id: 'optic_acog', name: 'ACOG 4x', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
+  zoom: 22, scoped: true, desc: '4x combat optic.' });
+def({ id: 'optic_pso1', name: 'PSO-1 Scope', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
+  zoom: 16, scoped: true, fits: ['akm', 'vs98'], desc: 'Soviet side-rail scope. AKM / VS98 only.' });
+def({ id: 'optic_hunting', name: 'Hunting Scope 12x', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
+  zoom: 7, scoped: true, fits: ['vs98', 'remington', 'akm', 'm4a1'], desc: 'Long-range 12x glass.' });
+def({ id: 'grip_foregrip', name: 'Foregrip', icon: '🤚', w: 1, h: 1, cat: 'attachment', atype: 'under',
+  spreadMul: 0.75, desc: 'Vertical grip. Tighter spread, less recoil.' });
+def({ id: 'under_flashlight', name: 'Tac Flashlight', icon: '🔦', w: 1, h: 1, cat: 'attachment', atype: 'under',
+  light: 'flash', desc: 'Weapon light. Turns on in darkness.' });
+def({ id: 'under_laser', name: 'Laser Sight', icon: '📍', w: 1, h: 1, cat: 'attachment', atype: 'under',
+  hipSpreadMul: 0.65, light: 'laser', desc: 'Visible laser. Much tighter hip fire.' });
+def({ id: 'mag_ext', name: 'Extended Mag', icon: '🧲', w: 1, h: 2, cat: 'attachment', atype: 'mag',
+  magMul: 1.6, fits: ['akm', 'm4a1', 'mp5', 'vaiga'], desc: '+60% magazine capacity.' });
 
 // ---------- Melee ----------
 def({ id: 'machete', name: 'Machete', icon: '🔪', w: 1, h: 4, cat: 'melee', dmg: 42, rate: 1.0, range: 1.9,
@@ -83,7 +105,10 @@ def({ id: 'painkillers', name: 'Painkillers', icon: '💊', w: 1, h: 1, cat: 'me
 def({ id: 'rope', name: 'Rope', icon: '🪢', w: 2, h: 2, cat: 'utility', desc: 'Sturdy rope.' });
 def({ id: 'duct_tape', name: 'Duct Tape', icon: '⭕', w: 1, h: 1, cat: 'utility', desc: 'Fixes everything.' });
 def({ id: 'matches', name: 'Matches', icon: '🔥', w: 1, h: 1, cat: 'utility', desc: 'Dry matches.' });
-def({ id: 'compass', name: 'Compass', icon: '🧭', w: 1, h: 1, cat: 'utility', desc: 'Points north.' });
+def({ id: 'compass', name: 'Compass', icon: '🧭', w: 1, h: 1, cat: 'utility',
+  desc: 'Carry it to see a heading bar on screen.' });
+def({ id: 'map', name: 'Map', icon: '🗺', w: 2, h: 2, cat: 'utility', usable: 'map',
+  desc: 'Topographic map of the island.' });
 def({ id: 'flare', name: 'Road Flare', icon: '🧨', w: 1, h: 2, cat: 'utility', desc: 'Burns bright red.' });
 
 // ---------- Clothing ----------
@@ -120,8 +145,18 @@ export function makeItem(id, qty) {
   const inst = { uid: UID++, def: d, x: -1, y: -1, rot: 0 };
   if (d.stack) inst.qty = qty ?? d.stack;
   if (d.uses) inst.usesLeft = d.uses;
-  if (d.cat === 'weapon') inst.loaded = qty ?? Math.floor(d.mag * (0.3 + Math.random() * 0.7));
+  if (d.cat === 'weapon') {
+    inst.loaded = qty ?? Math.floor(d.mag * (0.3 + Math.random() * 0.7));
+    inst.attachments = { optic: null, under: null, mag: null };
+  }
   return inst;
+}
+
+// can this attachment go on this weapon?
+export function attachmentFits(attDef, weaponDef) {
+  if (attDef.cat !== 'attachment' || weaponDef.cat !== 'weapon') return false;
+  if (attDef.fits && !attDef.fits.includes(weaponDef.id)) return false;
+  return true;
 }
 
 export function itemW(inst) { return inst.rot ? inst.def.h : inst.def.w; }
@@ -139,7 +174,9 @@ export const LOOT_TABLES = {
     ['courier_bag', 2],
   ]),
   military: T([
-    ['akm', 4], ['m4a1', 4], ['vs98', 2], ['vaiga', 3], ['mp5', 3],
+    ['akm', 4], ['m4a1', 4], ['vs98', 2], ['vaiga', 3], ['mp5', 3], ['m249', 1],
+    ['optic_rds', 3], ['optic_acog', 2], ['optic_pso1', 2], ['grip_foregrip', 3],
+    ['under_flashlight', 2], ['under_laser', 2], ['mag_ext', 2], ['map', 2],
     ['ammo_762x39', 8], ['ammo_556', 8], ['ammo_762x54', 4], ['ammo_12ga', 6], ['ammo_9mm', 6],
     ['helmet', 3], ['plate_carrier', 2], ['highcap_vest', 3], ['press_vest', 2], ['tac_gloves', 3],
     ['mil_belt', 3], ['field_jacket', 4], ['cargo_pants', 4], ['hunter_pants', 3], ['boonie', 2],
@@ -148,6 +185,7 @@ export const LOOT_TABLES = {
   ]),
   hunting: T([
     ['remington', 4], ['vs98', 2], ['ammo_12ga', 8], ['ammo_762x54', 5], ['hunter_pants', 4],
+    ['optic_hunting', 3], ['map', 2], ['compass', 2],
     ['boonie', 3], ['machete', 3], ['combat_knife', 2], ['canteen', 3], ['rice', 3], ['matches', 4],
     ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1], ['courier_bag', 2],
   ]),

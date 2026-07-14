@@ -3,16 +3,21 @@ import * as THREE from 'three';
 import { rollLoot, makeItem } from './items.js';
 
 const SIZE = 440;
+const ISLAND_R = 195;      // island radius: beyond this the ground dives underwater
+export const SEA_LEVEL = -0.42;
 
-// deterministic-ish gentle terrain
+// deterministic-ish gentle terrain, shaped into an island
 export function terrainHeight(x, z) {
   let h = 1.8 * Math.sin(x * 0.021) * Math.cos(z * 0.017)
     + 1.1 * Math.sin(x * 0.043 + 1.7) * Math.cos(z * 0.037 + 0.4)
     + 0.5 * Math.sin(x * 0.09 + 4.1) * Math.sin(z * 0.11 + 2.2);
-  // flatten the town plateau
   const d = Math.hypot(x, z);
+  // flatten the town plateau
   const flat = THREE.MathUtils.smoothstep(d, 26, 60);
-  return h * flat;
+  h *= flat;
+  // island mask: 1 inland, 0 past the shore; edges sink below sea level
+  const mask = 1 - THREE.MathUtils.smoothstep(d, ISLAND_R * 0.72, ISLAND_R);
+  return (h + 1.6) * mask - 1.2 + (mask - 1) * 9;
 }
 
 const CAT_COLORS = {
@@ -50,11 +55,26 @@ export class World {
     this.zombieSpawns = [];
     this.playerSpawn = new THREE.Vector3(70, 0, 85);
 
+    this.buildings = [];
     this.buildSky();
     this.buildTerrain();
+    this.buildWater();
     this.buildTown();
     this.buildForest();
+    this.pickSpawn();
     this.spawnLoot();
+  }
+
+  // survivors wash up on the south or east coast
+  pickSpawn() {
+    const angle = (Math.random() < 0.5 ? Math.PI / 2 : 0) + (Math.random() - 0.5) * 0.5;
+    for (let r = ISLAND_R; r > 60; r -= 3) {
+      const x = Math.cos(angle) * r, z = Math.sin(angle) * r;
+      if (terrainHeight(x, z) > 0.4) {
+        this.playerSpawn.set(x, 0, z);
+        return;
+      }
+    }
   }
 
   // ---------- environment: day/night cycle ----------
@@ -156,6 +176,15 @@ export class World {
     this.hemi.color.set(0x1c2438).lerp(new THREE.Color(0xcfe5ee), daylight);
     this.hemi.groundColor.set(0x10140f).lerp(new THREE.Color(0x4a5a40), daylight);
 
+    // ocean uniforms
+    if (this.waterUniforms) {
+      const u = this.waterUniforms;
+      u.uSunDir.value.copy(sunDir);
+      u.uSunColor.value.copy(this.sun.color);
+      u.uSunI.value = Math.max(0.12, daylight);
+      u.uSky.value.copy(sky);
+    }
+
     // sky sprites
     const sunPos = new THREE.Vector3(playerPos.x + sunDir.x * 320, sunDir.y * 320, playerPos.z + sunDir.z * 320);
     this.sunSprite.position.copy(sunPos);
@@ -175,13 +204,18 @@ export class World {
     const pos = geo.attributes.position;
     const colors = [];
     const grass = new THREE.Color(0x5f7a3d), grass2 = new THREE.Color(0x6d8a46),
-      dirt = new THREE.Color(0x7a6a4a);
+      dirt = new THREE.Color(0x7a6a4a), sand = new THREE.Color(0xcbb98a),
+      wetSand = new THREE.Color(0x8a7d5e);
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
       const h = terrainHeight(x, z);
       pos.setY(i, h);
       const n = Math.sin(x * 0.31 + z * 0.17) * Math.sin(x * 0.05 - z * 0.11);
-      const c = h > 2.2 ? dirt.clone().lerp(grass, 0.5) : (n > 0.25 ? grass2 : grass);
+      let c;
+      if (h < SEA_LEVEL + 0.1) c = wetSand;                       // seabed
+      else if (h < 0.75) c = sand;                                // beach ring
+      else if (h > 2.6) c = dirt.clone().lerp(grass, 0.5);
+      else c = n > 0.25 ? grass2 : grass;
       colors.push(c.r, c.g, c.b);
     }
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -190,13 +224,14 @@ export class World {
     mesh.receiveShadow = true;
     this.scene.add(mesh);
 
-    // roads through town
+    // roads through town (town plateau is flat, so a fixed height works)
+    const roadY = terrainHeight(0, 0) + 0.04;
     const roadMat = new THREE.MeshLambertMaterial({ color: 0x55534d });
     for (const [w, d, rot] of [[7, 120, 0], [7, 100, Math.PI / 2]]) {
       const r = new THREE.Mesh(new THREE.PlaneGeometry(w, d), roadMat);
       r.rotation.x = -Math.PI / 2;
       r.rotation.z = rot;
-      r.position.y = 0.04;
+      r.position.y = roadY;
       r.receiveShadow = true;
       this.scene.add(r);
     }
@@ -204,9 +239,71 @@ export class World {
     const pond = new THREE.Mesh(new THREE.CircleGeometry(9, 14),
       new THREE.MeshLambertMaterial({ color: 0x39697a }));
     pond.rotation.x = -Math.PI / 2;
-    pond.position.set(46, 0.06, -30);
+    pond.position.set(46, terrainHeight(46, -30) + 0.05, -30);
     this.scene.add(pond);
     this.pond = { x: 46, z: -30, r: 9 };
+  }
+
+  // ---------- ocean ----------
+  buildWater() {
+    const geo = new THREE.PlaneGeometry(1600, 1600, 72, 72);
+    geo.rotateX(-Math.PI / 2);
+    this.waterUniforms = {
+      uTime: { value: 0 },
+      uSunDir: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
+      uSunColor: { value: new THREE.Color(0xfff2d8) },
+      uSunI: { value: 1 },
+      uSky: { value: new THREE.Color(0x9fb8c8) },
+      uDeep: { value: new THREE.Color(0x0b3140) },
+      uShallow: { value: new THREE.Color(0x2e7d8c) },
+      uCamPos: { value: new THREE.Vector3() },
+    };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.waterUniforms,
+      transparent: true,
+      vertexShader: `
+        uniform float uTime;
+        varying vec3 vWorld;
+        varying vec3 vNormal;
+        float waveH(vec2 p, float t) {
+          return sin(p.x*0.11 + t*1.1) * cos(p.y*0.09 + t*0.8) * 0.16
+               + sin(p.x*0.32 - t*1.8 + p.y*0.28) * 0.055
+               + sin(p.x*0.06 + p.y*0.05 + t*0.4) * 0.1;
+        }
+        void main() {
+          vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
+          float h = waveH(wp.xz, uTime);
+          wp.y += h;
+          float e = 0.7;
+          float hx = waveH(wp.xz + vec2(e, 0.0), uTime);
+          float hz = waveH(wp.xz + vec2(0.0, e), uTime);
+          vNormal = normalize(vec3(h - hx, e, h - hz));
+          vWorld = wp;
+          gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+        }`,
+      fragmentShader: `
+        uniform vec3 uSky, uDeep, uShallow, uSunDir, uSunColor, uCamPos;
+        uniform float uSunI;
+        varying vec3 vWorld;
+        varying vec3 vNormal;
+        void main() {
+          vec3 V = normalize(uCamPos - vWorld);
+          vec3 N = normalize(vNormal);
+          float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);
+          float d = length(vWorld.xz);
+          float shore = 1.0 - smoothstep(140.0, 210.0, d);
+          vec3 col = mix(mix(uDeep, uShallow, shore * 0.9), uSky, fres * 0.85);
+          vec3 H = normalize(V + normalize(uSunDir));
+          col += uSunColor * pow(max(dot(N, H), 0.0), 180.0) * 2.4 * uSunI;
+          // match the scene fog so the horizon blends
+          float fogF = smoothstep(60.0, 260.0, length(uCamPos - vWorld));
+          col = mix(col, uSky, fogF);
+          gl_FragColor = vec4(col, 0.94 - fogF * 0.1);
+        }`,
+    });
+    const water = new THREE.Mesh(geo, mat);
+    water.position.y = SEA_LEVEL;
+    this.scene.add(water);
   }
 
   // ---------- structures ----------
@@ -225,6 +322,7 @@ export class World {
   }
 
   house(cx, cz, w, d, color, roofColor, lootTable, rot = 0) {
+    this.buildings.push({ x: cx, z: cz, table: lootTable });
     const g = new THREE.Group();
     g.position.set(cx, terrainHeight(cx, cz), cz);
     g.rotation.y = rot;
@@ -304,8 +402,8 @@ export class World {
     this.house(-88, -70, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting');
     this.house(95, 60, 7, 6, 0x6e5a40, 0x4a3c30, 'hunting');
 
-    // military camp NW
-    const mx = -60, mz = -55;
+    // military camp NW (on the dry plateau — the lowlands to the east are a lake)
+    const mx = -70, mz = -90;
     for (let i = 0; i < 3; i++) {
       const tx = mx + i * 9, tz = mz;
       const tent = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 6, 3, 1),
@@ -330,7 +428,7 @@ export class World {
     this.crate(6, 6, 1, 0x6a5a44);
     this.crate(-7, -5, 1.1, 0x74644c);
     this.crate(24, 6, 0.9);
-    const lw = this.wall(0, -8, 8, 0.4, 1.1, 0x8a8478);
+    const lw = this.wall(0, -8, 8, 0.4, 1.1, 0x8a8478, terrainHeight(0, -8));
     this.colliders[this.colliders.length - 1].top = terrainHeight(0, -8) + 1.1;
     this.colliders[this.colliders.length - 1].climb = true;
     lw.receiveShadow = true;
@@ -359,8 +457,9 @@ export class World {
       const x = (Math.random() - 0.5) * (SIZE - 30);
       const z = (Math.random() - 0.5) * (SIZE - 30);
       if (Math.hypot(x, z) < 42) continue;                       // keep town clear
+      if (terrainHeight(x, z) < 0.75) continue;                  // no trees on the beach or seabed
       if (Math.hypot(x - 46, z + 30) < 13) continue;             // pond
-      if (Math.hypot(x + 60, z + 55) < 18) continue;             // military camp
+      if (Math.hypot(x + 61, z + 90) < 20) continue;             // military camp
       if (Math.hypot(x + 88, z + 70) < 8 || Math.hypot(x - 95, z - 60) < 8) continue; // cabins
       const y = terrainHeight(x, z);
       const s = 0.7 + Math.random() * 0.9;
@@ -403,13 +502,22 @@ export class World {
     for (const spot of this.lootSpots) {
       if (Math.random() < 0.8) this.spawnGroundItem(rollLoot(spot.table), spot.x, spot.z);
     }
-    // guaranteed starter gear near spawn
+    // guaranteed starter gear washed up on the shore near spawn
     const sp = this.playerSpawn;
-    this.spawnGroundItem(makeItem('mp5'), sp.x + 2, sp.z + 1.5);
-    this.spawnGroundItem(makeItem('ammo_9mm'), sp.x + 2.8, sp.z + 1.2);
-    this.spawnGroundItem(makeItem('water_bottle'), sp.x + 1.5, sp.z + 2.6);
-    this.spawnGroundItem(makeItem('beans'), sp.x + 3.2, sp.z + 2.2);
-    this.spawnGroundItem(makeItem('machete'), sp.x + 1, sp.z + 3.4);
+    const inland = Math.atan2(-sp.z, -sp.x); // toward island center
+    const ix = Math.cos(inland), iz = Math.sin(inland);
+    const drop = (id, off, side) => {
+      const x = sp.x + ix * off + iz * side, z = sp.z + iz * off - ix * side;
+      this.spawnGroundItem(makeItem(id), x, z);
+    };
+    drop('m249', 2, 0.8);
+    drop('ammo_556', 2.6, 0.2);
+    drop('ammo_556', 2.9, 1.4);
+    drop('water_bottle', 1.6, -1.2);
+    drop('beans', 3.2, -0.6);
+    drop('machete', 1.2, 2);
+    drop('compass', 2.2, -2);
+    drop('map', 3.6, 1);
   }
 
   // ---------- ground items ----------
@@ -562,8 +670,12 @@ export class World {
     this.flashes.push({ sprite: sp, ttl: 0.3, grow: 2.2 });
   }
 
-  update(dt, t, playerPos) {
+  update(dt, t, playerPos, camPos) {
     this.updateDayNight(dt, playerPos);
+    if (this.waterUniforms) {
+      this.waterUniforms.uTime.value = t;
+      if (camPos) this.waterUniforms.uCamPos.value.copy(camPos);
+    }
     // item bobbing (only near player to save cycles)
     for (const gi of this.groundItems) {
       if (Math.abs(gi.x - playerPos.x) < 30 && Math.abs(gi.z - playerPos.z) < 30) {

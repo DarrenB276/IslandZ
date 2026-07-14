@@ -4,7 +4,7 @@ import { EffectComposer } from '../vendor/examples/jsm/postprocessing/EffectComp
 import { RenderPass } from '../vendor/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/examples/jsm/postprocessing/OutputPass.js';
-import { World } from './world.js';
+import { World, terrainHeight, SEA_LEVEL } from './world.js';
 import { Player } from './player.js';
 import { Zombies } from './zombies.js';
 import { Controls } from './controls.js';
@@ -60,25 +60,51 @@ let fpsAcc = 0, fpsN = 0, fpsGraceT = 0;
 const viewmodel = new THREE.Group();
 camera.add(viewmodel);
 scene.add(camera);
-let viewmodelUid = -1;
+let viewmodelSig = '';
+let vmMesh = null;
 function refreshViewmodel() {
   const w = G.player.weapon;
-  const uid = w ? w.uid : 0;
-  if (uid === viewmodelUid) return;
-  viewmodelUid = uid;
+  const sig = w ? `${w.uid}:${w.attachments ? Object.values(w.attachments).join(',') : ''}` : '';
+  if (sig === viewmodelSig) return;
+  viewmodelSig = sig;
   viewmodel.clear();
+  vmMesh = null;
   if (!w) return;
-  const mesh = createWeaponMesh(w.def.id);
-  if (w.def.cat === 'weapon') {
-    mesh.position.set(0.26, -0.24, -0.55);
-    mesh.rotation.set(0, 0, 0);
-  } else {
-    mesh.position.set(0.3, -0.34, -0.5);
-    mesh.rotation.set(0.5, 0, -0.25);
+  vmMesh = createWeaponMesh(w.def.id, w.attachments);
+  vmMesh.traverse((o) => { o.castShadow = false; }); // don't catch the sun-shadow camera
+  viewmodel.add(vmMesh);
+}
+G.onWeaponVisualChanged = () => { viewmodelSig = '~'; }; // force rebuild next frame
+
+// FPP weapon poses: idle tactical hold / hip-fire / ADS
+const VM_POSES = {
+  idle: { pos: [0.27, -0.3, -0.46], rot: [0.32, 0.32, 0.06] },   // low ready, angled in
+  hip: { pos: [0.24, -0.24, -0.52], rot: [0.02, 0.05, 0] },
+  ads: { pos: [0, -0.155, -0.4], rot: [0, 0, 0] },
+  melee: { pos: [0.3, -0.34, -0.5], rot: [0.5, 0, -0.25] },
+};
+let lastFireInput = -10;
+
+function updateViewmodelPose(dt) {
+  if (!vmMesh) return;
+  const p = G.player, c = G.controls;
+  const w = p.weapon;
+  let pose = VM_POSES.melee;
+  if (w && w.def.cat === 'weapon') {
+    const now = performance.now() / 1000;
+    if (c.firing) lastFireInput = now;
+    if (c.aim) pose = VM_POSES.ads;
+    else if (now - lastFireInput < 1.4 || p.reloading > 0) pose = VM_POSES.hip;
+    else pose = VM_POSES.idle;
   }
-  // viewmodel must not catch the sun-shadow camera
-  mesh.traverse((o) => { o.castShadow = false; });
-  viewmodel.add(mesh);
+  const k = Math.min(1, dt * 10);
+  vmMesh.position.lerp(new THREE.Vector3(...pose.pos), k);
+  vmMesh.rotation.x = THREE.MathUtils.lerp(vmMesh.rotation.x, pose.rot[0], k);
+  vmMesh.rotation.y = THREE.MathUtils.lerp(vmMesh.rotation.y, pose.rot[1], k);
+  vmMesh.rotation.z = THREE.MathUtils.lerp(vmMesh.rotation.z, pose.rot[2], k);
+  // flashlight on the viewmodel follows darkness too
+  const fl = vmMesh.userData.flashlight;
+  if (fl) fl.intensity = (G.world.daylight ?? 1) < 0.4 ? 5 : 0;
 }
 
 // ================= camera =================
@@ -91,7 +117,7 @@ function updateCamera(dt) {
   const w = p.weapon;
   const fpp = G.view === 'fpp' && !p.dead;
 
-  const targetFov = aiming ? (w && w.def.cat === 'weapon' ? w.def.zoom : 58) : 70;
+  const targetFov = aiming ? (w && w.def.cat === 'weapon' ? p.weaponZoom(w) : 58) : 70;
   camState.fov = THREE.MathUtils.lerp(camState.fov, targetFov, Math.min(1, dt * 9));
   camera.fov = camState.fov;
   camera.updateProjectionMatrix();
@@ -101,15 +127,16 @@ function updateCamera(dt) {
   const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
   p.rig.group.visible = !fpp;
-  viewmodel.visible = fpp && !(w && w.def.scoped && aiming);
+  viewmodel.visible = fpp && !(w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming);
 
   if (fpp) {
     const eyeY = p.pos.y + (EYE[p.stance] ?? 1.58) + (p.climbT >= 0 ? 0.2 : 0);
     camera.position.set(p.pos.x, eyeY, p.pos.z);
     camera.lookAt(camera.position.clone().add(fwd));
-    // weapon sway/bob
+    updateViewmodelPose(dt);
+    // sway/bob layered on top of the pose
     const bob = Math.sin(performance.now() * 0.008) * Math.min(1, p.speed / 3) * 0.012;
-    viewmodel.position.set(aiming ? -0.12 : 0, bob + (aiming ? 0.045 : 0), p.recoil * 0.12);
+    viewmodel.position.set(0, bob, p.recoil * 0.12);
     return;
   }
 
@@ -172,6 +199,78 @@ G.controls.on('interact', () => {
   } else {
     G.hud.toast('No room for ' + gi.inst.def.name);
   }
+});
+
+// ================= island map overlay =================
+let mapDrawn = false;
+function drawMapBase() {
+  const cv = document.getElementById('map-canvas');
+  const ctx = cv.getContext('2d');
+  const S = cv.width, EXT = 230; // world units from center shown
+  const toPx = (v) => (v / EXT + 1) * S / 2;
+  for (let py = 0; py < S; py += 2) {
+    for (let px = 0; px < S; px += 2) {
+      const x = (px / S * 2 - 1) * EXT, z = (py / S * 2 - 1) * EXT;
+      const h = terrainHeight(x, z);
+      let col;
+      if (h < SEA_LEVEL) col = h < SEA_LEVEL - 3 ? '#39687f' : '#4d84a0';
+      else if (h < 0.75) col = '#cbb98a';
+      else if (h > 2.6) col = '#8a8468';
+      else col = '#7d945c';
+      ctx.fillStyle = col;
+      ctx.fillRect(px, py, 2, 2);
+    }
+  }
+  // roads
+  ctx.fillStyle = '#5c5a52';
+  ctx.fillRect(toPx(-3.5), toPx(-60), toPx(3.5) - toPx(-3.5), toPx(60) - toPx(-60));
+  ctx.fillRect(toPx(-50), toPx(-3.5), toPx(50) - toPx(-50), toPx(3.5) - toPx(-3.5));
+  // pond
+  ctx.fillStyle = '#4d84a0';
+  ctx.beginPath();
+  ctx.arc(toPx(46), toPx(-30), (9 / EXT) * S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  // buildings
+  for (const b of G.world.buildings) {
+    ctx.fillStyle = b.table === 'medical' ? '#c04840' : '#3d3a34';
+    ctx.fillRect(toPx(b.x) - 3, toPx(b.z) - 3, 6, 6);
+  }
+  // military tents
+  ctx.fillStyle = '#4a563e';
+  ctx.fillRect(toPx(-70) - 5, toPx(-90) - 4, 24, 8);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1;
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#2e2a22';
+  ctx.fillText('N ↑', 12, 22);
+}
+
+G.showMap = () => {
+  if (!mapDrawn) { drawMapBase(); mapDrawn = true; }
+  const cv = document.getElementById('map-canvas');
+  const ctx = cv.getContext('2d');
+  if (mapDrawn) {
+    // redraw base + player marker fresh each open
+    drawMapBase();
+    const EXT = 230, S = cv.width;
+    const toPx = (v) => (v / EXT + 1) * S / 2;
+    const p = G.player.pos;
+    ctx.fillStyle = '#d83a2e';
+    ctx.beginPath();
+    ctx.arc(toPx(p.x), toPx(p.z), 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  document.getElementById('map-overlay').classList.add('open');
+  G.paused = true;
+  G.controls.enabled = false;
+};
+document.getElementById('map-close').addEventListener('click', () => {
+  document.getElementById('map-overlay').classList.remove('open');
+  G.paused = false;
+  G.controls.enabled = !G.inventory.isOpen && started && !G.player.dead;
 });
 
 // ================= death / respawn =================
@@ -240,7 +339,7 @@ function loop() {
       G.player.speed = 0;
     }
     G.zombies.update(dt, elapsed);
-    G.world.update(dt, elapsed, G.player.pos);
+    G.world.update(dt, elapsed, G.player.pos, camera.position);
     updateCamera(dt);
     updateInteractPrompt(dt);
     G.hud.update(dt);
@@ -265,7 +364,7 @@ function loop() {
     const a = elapsed * 0.05;
     camera.position.set(Math.cos(a) * 45, 16, Math.sin(a) * 45);
     camera.lookAt(0, 2, 0);
-    G.world.update(dt, elapsed, camera.position);
+    G.world.update(dt, elapsed, camera.position, camera.position);
   }
   if (postEnabled) composer.render();
   else renderer.render(scene, camera);

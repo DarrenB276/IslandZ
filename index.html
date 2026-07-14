@@ -101,17 +101,29 @@
 <div id="inventory">
   <div id="inv-header">
     <span class="inv-title">INVENTORY</span>
-    <button id="inv-close">✕</button>
+    <div class="inv-header-right">
+      <button id="inv-dev-btn">DEV</button>
+      <button id="inv-close">✕</button>
+    </div>
   </div>
   <div id="inv-body">
-    <div id="inv-equipment">
+    <div id="inv-vicinity">
+      <div class="inv-section-title">GROUND / VICINITY</div>
+      <div id="vicinity-grid"></div>
+    </div>
+    <div id="inv-center">
+      <div id="doll-row">
+        <div class="doll-stats" id="doll-stats-l"></div>
+        <div id="paper-doll"></div>
+        <div class="doll-stats" id="doll-stats-r"></div>
+      </div>
+      <div id="hands-wrap"></div>
+    </div>
+    <div id="inv-right">
       <div class="inv-section-title">EQUIPMENT</div>
       <div id="equip-slots"></div>
-    </div>
-    <div id="inv-containers"></div>
-    <div id="inv-vicinity">
-      <div class="inv-section-title">VICINITY</div>
-      <div id="vicinity-grid"></div>
+      <div class="inv-section-title">STORAGE</div>
+      <div id="inv-containers"></div>
     </div>
   </div>
   <div id="inv-quickslots"></div>
@@ -119,6 +131,15 @@
   <button id="btn-rotate">⟳ ROTATE</button>
   <div id="action-sheet"></div>
 </div>
+
+<!-- ============ MAP OVERLAY ============ -->
+<div id="map-overlay">
+  <canvas id="map-canvas" width="640" height="640"></canvas>
+  <button id="map-close">✕ CLOSE MAP</button>
+</div>
+
+<!-- ============ COMPASS ============ -->
+<div id="compass-bar"><div id="compass-strip"></div><div class="compass-needle"></div></div>
 
 <!-- ============ PAUSE MENU / SETTINGS ============ -->
 <div id="pause-menu">

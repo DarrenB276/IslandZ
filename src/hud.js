@@ -9,7 +9,7 @@ const SVG = {
 };
 
 // stat icon paths (shared between the dim silhouette and the clipped fill layer)
-const STAT_PATHS = {
+export const STAT_PATHS = {
   hp: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3z"/>',
   blood: '<path d="M12 2s7 8.1 7 13a7 7 0 0 1-14 0c0-4.9 7-13 7-13z"/>',
   food: '<path d="M15.5 2c2.5 0 6.5 4 6.5 6.5 0 1.9-1.6 3.5-3.5 3.5-.9 0-1.8-.4-2.4-1L9.9 17.2a2.5 2.5 0 1 1-3.1-3.1L13 7.9c-.6-.6-1-1.5-1-2.4C12 3.6 13.6 2 15.5 2zM5 18a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>',
@@ -37,6 +37,36 @@ export class HUD {
     this.statusCache = '';
     this.quickCache = '';
     this.tick = 0;
+    this.compassCheck = 0;
+    this.hasCompass = false;
+    this.buildCompass();
+  }
+
+  // ---------- compass ----------
+  buildCompass() {
+    this.compassBar = document.getElementById('compass-bar');
+    this.compassStrip = document.getElementById('compass-strip');
+    this.ppd = 2.6; // pixels per degree
+    const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    let html = '';
+    for (let cyc = 0; cyc < 3; cyc++) {
+      for (let a = 0; a < 360; a += 15) {
+        const x = (cyc * 360 + a) * this.ppd;
+        if (a % 45 === 0) html += `<span style="left:${x}px">${labels[a / 45]}</span>`;
+        else html += `<i style="left:${x}px"></i>`;
+      }
+    }
+    this.compassStrip.innerHTML = html;
+  }
+
+  updateCompass() {
+    if (!this.hasCompass) { this.compassBar.classList.remove('on'); return; }
+    this.compassBar.classList.add('on');
+    const yaw = this.G.controls.camYaw;
+    const heading = ((-yaw * 180 / Math.PI) % 360 + 360) % 360;
+    const center = this.compassBar.clientWidth / 2;
+    this.compassStrip.style.transform =
+      `translateX(${center - (heading + 360) * this.ppd}px)`;
   }
 
   buildStats() {
@@ -63,10 +93,18 @@ export class HUD {
   }
 
   update(dt) {
+    this.updateCompass(); // every frame: heading must track the camera smoothly
     this.tick -= dt;
     if (this.tick > 0) return;
     this.tick = 0.2;
     const p = this.G.player;
+
+    // scan for a carried compass occasionally
+    this.compassCheck -= 0.2;
+    if (this.compassCheck <= 0) {
+      this.compassCheck = 1;
+      this.hasCompass = p.containers().some((c) => c.grid.items.some((it) => it.def.id === 'compass'));
+    }
 
     this.setFill('hp', p.hp / 100, p.hp <= 20);
     this.setFill('blood', p.blood / 5000, p.blood <= 2200);
@@ -104,7 +142,7 @@ export class HUD {
 
     // scope overlay
     const w = p.weapon;
-    const scoped = !!(w && w.def.scoped && this.G.controls.aim);
+    const scoped = !!(w && w.def.cat === 'weapon' && p.weaponScoped(w) && this.G.controls.aim);
     this.el.scope.classList.toggle('on', scoped);
     this.el.crosshair.classList.toggle('hide', scoped || !w || w.def.cat !== 'weapon');
 
@@ -156,7 +194,7 @@ export class HUD {
     } else {
       this.el.wname.textContent = w.def.name;
       const mode = p.reloading > 0 ? 'RELOADING' : w.def.auto ? 'AUTO' : w.def.pellets ? (w.def.id === 'remington' ? 'PUMP' : 'SEMI') : w.def.scoped ? 'BOLT' : 'SEMI';
-      this.el.wammo.innerHTML = `${w.loaded ?? 0}/${w.def.mag}<span class="mode">${mode}</span>`;
+      this.el.wammo.innerHTML = `${w.loaded ?? 0}/${p.weaponMag(w)}<span class="mode">${mode}</span>`;
     }
     this.el.reloadBtn.classList.remove('flash');
     this.renderQuickslots(true);

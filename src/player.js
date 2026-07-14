@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { createHumanoid, animateHumanoid, createWeaponMesh, attachWeapon,
   setClothingColors, setHeadgear, setMask, setVest, setBackpack } from './character.js';
-import { makeItem } from './items.js';
+import { makeItem, ITEMS, attachmentFits } from './items.js';
 import { SFX } from './audio.js';
 
 const SPEEDS = { prone: 0.7, crouch: 1.4, walk: 1.8, jog: 3.4, run: 5.6 };
@@ -116,12 +116,49 @@ export class Player {
     setVest(this.rig, e.vest?.def);
     setBackpack(this.rig, e.back?.def);
     const w = e.hands;
-    if (w) attachWeapon(this.rig, createWeaponMesh(w.def.id), w.def.cat === 'weapon');
+    if (w) attachWeapon(this.rig, createWeaponMesh(w.def.id, w.attachments), w.def.cat === 'weapon');
     else attachWeapon(this.rig, null, false);
     this.G.hud?.refreshWeapon();
+    this.G.onWeaponVisualChanged?.();
   }
 
   get weapon() { return this.equipment.hands; }
+
+  // ---- attachment-aware weapon stats ----
+  weaponMag(w) {
+    const magId = w.attachments?.mag;
+    return Math.round(w.def.mag * (magId ? ITEMS[magId].magMul : 1));
+  }
+  weaponZoom(w) {
+    const o = w.attachments?.optic;
+    return o ? ITEMS[o].zoom : w.def.zoom;
+  }
+  weaponScoped(w) {
+    const o = w.attachments?.optic;
+    return !!(w.def.scoped || (o && ITEMS[o].scoped));
+  }
+
+  // attach an attachment item to a weapon (the item instance is consumed)
+  attachTo(weapon, attInst) {
+    if (!attachmentFits(attInst.def, weapon.def)) return false;
+    if (!weapon.attachments) weapon.attachments = { optic: null, under: null, mag: null };
+    const slot = attInst.def.atype;
+    const prev = weapon.attachments[slot];
+    weapon.attachments[slot] = attInst.def.id;
+    if (prev) this.G.inventory.stashOrDrop(makeItem(prev));
+    if (this.equipment.hands === weapon) this.applyLook();
+    SFX.equip();
+    return true;
+  }
+
+  detachFrom(weapon, slot) {
+    const id = weapon.attachments?.[slot];
+    if (!id) return;
+    weapon.attachments[slot] = null;
+    this.G.inventory.stashOrDrop(makeItem(id));
+    if (this.equipment.hands === weapon) this.applyLook();
+    SFX.equip();
+  }
 
   // find an item anywhere on the character (pockets, hands, shoulder, worn)
   findItemByUid(uid) {
@@ -230,6 +267,9 @@ export class Player {
     G.camera.getWorldDirection(dir);
     const shots = w.def.pellets ?? 1;
     let spread = w.def.spread * (G.controls.aim ? 1 : 2.6);
+    const under = w.attachments?.under ? ITEMS[w.attachments.under] : null;
+    if (under?.spreadMul) spread *= under.spreadMul;
+    if (under?.hipSpreadMul && !G.controls.aim) spread *= under.hipSpreadMul;
     if (this.stance === 'crouch') spread *= 0.75;
     if (this.stance === 'prone') spread *= 0.55;
     if (this.speed > 0.5) spread *= 1.6;
@@ -331,7 +371,7 @@ export class Player {
   reload() {
     const w = this.weapon;
     if (!w || w.def.cat !== 'weapon' || this.reloading > 0 || this.dead) return;
-    const need = w.def.mag - (w.loaded ?? 0);
+    const need = this.weaponMag(w) - (w.loaded ?? 0);
     if (need <= 0) return;
     // find ammo across containers
     let available = 0;
@@ -505,6 +545,16 @@ export class Player {
     else this.triggerHeld = false;
     this.recoil = Math.max(0, this.recoil - dt * 2.2);
 
+    // weapon flashlight follows darkness
+    const fl = this.rig.weaponMesh?.userData?.flashlight;
+    if (fl) {
+      const on = (G.world.daylight ?? 1) < 0.4;
+      fl.intensity = on ? 5 : 0;
+      if (this.rig.weaponMesh.userData.flashLens) {
+        this.rig.weaponMesh.userData.flashLens.material.emissive?.setHex?.(on ? 0xfff2cc : 0x000000);
+      }
+    }
+
     this.updateStats(dt);
 
     // ----- rig -----
@@ -543,7 +593,10 @@ export class Player {
       let nx = this.pos.x + dx * this.speed * dt;
       let nz = this.pos.z + dz * this.speed * dt;
       const fixed = G.world.collide(nx, nz, 0.35, this.pos.y);
-      this.pos.x = fixed.x; this.pos.z = fixed.z;
+      // can't swim: stop at the waterline
+      if (G.world.groundHeightSimple(fixed.x, fixed.z) > -0.25) {
+        this.pos.x = fixed.x; this.pos.z = fixed.z;
+      }
 
       // face movement direction (or camera when aiming / in first person)
       const face = (c.aim || G.view === 'fpp') ? c.camYaw : wishYaw;

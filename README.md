@@ -61,13 +61,19 @@ and a **spawn list of every registered item**. The red button at the bottom of t
 
 ## Features
 
-**Tetris inventory** — DayZ-style grid storage. Every equipped clothing piece (top, pants, vest, belt, backpack) contributes its own pocket grid. Items occupy `w×h` cells, can be **rotated while dragging**, dragged between containers, equipped by dropping on equipment slots, and dropped to the ground. The **vicinity panel** shows nearby loot, and ground containers (backpacks, vests, clothes with pockets) **expose their own grids in place** — loot them or stash into them without picking them up. Tap an item for context actions (eat / drink / use / equip / drop).
+**Tetris inventory** — DayZ-style, laid out over a **see-through background** so you can watch your surroundings: ground/vicinity on the left, a **paper doll** of your character (showing equipped clothing colours) in the centre with **live stats (%)** on either side and the HANDS slot beneath, equipment slots and storage grids on the right, quickslot bar at the bottom. Items occupy `w×h` cells, rotate while dragging, drag between containers/slots/ground. Ground containers expose their grids in place. Tap an item for context actions.
 
-**Camera** — third person or first person (with weapon viewmodel and scope support), toggle any time.
+**Camera** — third person or first person, toggle any time. FPP has proper weapon handling: **idle tactical low-ready**, **hip-fire**, and **ADS** poses that blend as you fight, plus scope overlays on magnified optics.
+
+**Character model** — jointed low-poly rig with **elbows and knees**: bent-knee crouches, striding knee lift, supporting-hand weapon holds, elbow-extending punches and zombie lunges.
 
 **Day/night cycle** — 20-minute full day with dawn/dusk palettes, sun & moon, and darkness that actually matters: zombies see about half as far at night. Post-processing (half-res bloom + light-shaft god rays, ACES tone mapping) is tuned for mobile and auto-disables if the device can't hold frame rate.
 
-**Weapons** — AKM, M4A1, VS98 sniper (scoped), Remington 870 pump, Vaiga semi-auto shotgun, MP5-K, plus Machete, Cleaver, Kitchen Knife, Combat Knife and bare fists. Real magazine/ammo economy (5 ammo types found as stacks), fire modes, spread affected by stance/movement/aiming, recoil, tracers, muzzle flash, headshot multipliers. Gunshots aggro zombies by noise radius.
+**Weapons** — AKM, M4A1, VS98 sniper (scoped), Remington 870 pump, Vaiga semi-auto shotgun, MP5-K, **M249 SAW** (100-round belt), plus Machete, Cleaver, Kitchen Knife, Combat Knife and bare fists. Real magazine/ammo economy (5 ammo types found as stacks), fire modes, spread affected by stance/movement/aiming, recoil, tracers, muzzle flash, headshot multipliers. Gunshots aggro zombies by noise radius.
+
+**Attachments** — drag an attachment onto a weapon (in a grid or the HANDS slot) to mount it; remove it from the weapon's tap menu. Optics: **RDS**, **ACOG 4x**, **PSO-1** (AKM/VS98), **12x Hunting Scope** — they change aim zoom and add scope overlays. Underbarrel: **Foregrip** (tighter spread), **Tac Flashlight** (real light that switches on in darkness), **Laser** (much tighter hip fire). **Extended Mag** (+60% capacity). Attachments render on the weapon model and the first-person viewmodel.
+
+**The island** — the map is a real island: sand beaches, an inland lake, and an animated ocean shader (waves, fresnel sky reflection, sun glint, shore shallows). You spawn on the **south or east coast** with your starter gear washed up beside you. You can't swim — the waterline is the world's edge. The **Map** item opens a hand-drawn island map with your position; carrying a **Compass** shows a degrees bar at the top of the screen.
 
 **Zombies** — DayZ-style infected with *sight-based* detection (vision cone + line-of-sight blocked by walls and terrain obstacles, not a plain radius), plus short-range hearing of footsteps. AI states: **idle**, **random wander**, and **aggro** (sprint on sight, shamble on memory, lose you after breaking line of sight). Attacks can cause bleeding and wound infection.
 
@@ -82,6 +88,13 @@ and a **spawn list of every registered item**. The red button at the bottom of t
 **World** — procedural low-poly island: town with lootable houses, medical clinic, military camp, hunting cabins, forests, pond, roads. Loot tables per zone.
 
 **Mobile HUD** — adaptive layout (`vmin`/`clamp()` + safe-area insets), floating joystick, touch-look, contextual pickup prompt, hit markers, damage/blood-loss screen effects, sniper scope overlay.
+
+## Multiplayer status
+
+The game is single-player today, prepared for multiplayer: `src/net.js` defines the
+state-sync boundary (player snapshots at 10 Hz over WebSocket, remote players rendered
+through the same rig/animation system). What's still needed: a relay server, a shared
+world seed, and snapshot interpolation — gameplay code won't need to change.
 
 ## Code map
 

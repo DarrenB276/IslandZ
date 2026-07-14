@@ -1,6 +1,27 @@
 // ================= Tetris inventory: grid model + touch drag & drop UI =================
-import { itemW, itemH } from './items.js';
+import { itemW, itemH, ITEMS, attachmentFits } from './items.js';
 import { SFX } from './audio.js';
+import { STAT_PATHS } from './hud.js';
+
+const hex = (c) => '#' + (c ?? 0x777777).toString(16).padStart(6, '0');
+
+// bounding rect clipped by scrollable ancestors — parts scrolled out of view must not catch drops
+function visibleRect(el) {
+  const r = el.getBoundingClientRect();
+  let left = r.left, right = r.right, top = r.top, bottom = r.bottom;
+  let n = el.parentElement;
+  while (n && n !== document.body) {
+    const st = getComputedStyle(n);
+    if (/(auto|scroll|hidden)/.test(st.overflowY + st.overflowX)) {
+      const pr = n.getBoundingClientRect();
+      left = Math.max(left, pr.left); right = Math.min(right, pr.right);
+      top = Math.max(top, pr.top); bottom = Math.min(bottom, pr.bottom);
+    }
+    n = n.parentElement;
+  }
+  return { left, right, top, bottom };
+}
+const inRect = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
 const SLOT_ORDER = [
   ['head', 'HEAD'], ['mask', 'MASK'], ['top', 'TOP'], ['vest', 'VEST'],
@@ -128,6 +149,54 @@ export class Inventory {
     this.renderContainers();
     this.renderVicinity();
     this.renderQuickslots();
+    this.renderDoll();
+  }
+
+  // ---------- paper doll + stats ----------
+  renderDoll() {
+    const p = this.G.player;
+    const e = p.equipment;
+    const skin = '#d8a583';
+    const top = e.top ? hex(e.top.def.color) : '#c8b8a0';
+    const pants = e.pants ? hex(e.pants.def.color) : '#777069';
+    document.getElementById('paper-doll').innerHTML = `
+      <svg viewBox="0 0 100 172">
+        ${e.back ? `<rect x="26" y="34" width="48" height="34" rx="6" fill="${hex(e.back.def.color)}" opacity="0.9"/>` : ''}
+        <rect x="38" y="4" width="24" height="24" rx="5" fill="${skin}"/>
+        ${e.mask ? `<rect x="40" y="17" width="20" height="9" rx="3" fill="${hex(e.mask.def.color)}"/>` : ''}
+        ${e.head ? `<rect x="35" y="0" width="30" height="10" rx="4" fill="${hex(e.head.def.color)}"/>`
+          : `<rect x="37" y="1" width="26" height="6" rx="3" fill="#3a2a1c"/>`}
+        <rect x="13" y="32" width="13" height="30" rx="5" fill="${top}"/>
+        <rect x="74" y="32" width="13" height="30" rx="5" fill="${top}"/>
+        <rect x="14" y="62" width="11" height="22" rx="4" fill="${top}"/>
+        <rect x="75" y="62" width="11" height="22" rx="4" fill="${top}"/>
+        <rect x="15" y="84" width="10" height="9" rx="3" fill="${e.gloves ? hex(e.gloves.def.color) : skin}"/>
+        <rect x="75" y="84" width="10" height="9" rx="3" fill="${e.gloves ? hex(e.gloves.def.color) : skin}"/>
+        <rect x="29" y="30" width="42" height="54" rx="6" fill="${top}"/>
+        ${e.vest ? `<rect x="27" y="33" width="46" height="32" rx="6" fill="${hex(e.vest.def.color)}"/>` : ''}
+        ${e.belt ? `<rect x="29" y="82" width="42" height="6" rx="2" fill="${hex(e.belt.def.color)}"/>` : ''}
+        <rect x="31" y="88" width="17" height="42" rx="5" fill="${pants}"/>
+        <rect x="52" y="88" width="17" height="42" rx="5" fill="${pants}"/>
+        <rect x="32" y="130" width="15" height="36" rx="5" fill="${pants}"/>
+        <rect x="53" y="130" width="15" height="36" rx="5" fill="${pants}"/>
+        <rect x="31" y="164" width="17" height="8" rx="3" fill="#33302a"/>
+        <rect x="52" y="164" width="17" height="8" rx="3" fill="#33302a"/>
+      </svg>`;
+
+    const stat = (key, val, warn, bad, suffix = '%') => {
+      const cls = val <= bad ? 'bad' : val <= warn ? 'warn' : '';
+      return `<div class="doll-stat ${cls}">
+        <svg viewBox="0 0 24 24">${STAT_PATHS[key]}</svg>
+        <span class="ds-val">${Math.round(val)}${suffix}</span></div>`;
+    };
+    document.getElementById('doll-stats-l').innerHTML =
+      stat('hp', p.hp, 55, 25) + stat('blood', p.blood / 50, 75, 45);
+    const t = p.temp;
+    const tCls = (t <= 35 || t >= 38.4) ? 'bad' : (t <= 35.9 || t >= 37.4) ? 'warn' : '';
+    document.getElementById('doll-stats-r').innerHTML =
+      stat('food', p.food, 45, 20) + stat('water', p.water, 45, 20) +
+      `<div class="doll-stat ${tCls}"><svg viewBox="0 0 24 24">${STAT_PATHS.temp}</svg>
+        <span class="ds-val">${t.toFixed(1)}°</span></div>`;
   }
 
   // quickslot bar inside the inventory: drag an item onto a slot to assign it
@@ -199,6 +268,8 @@ export class Inventory {
 
   renderEquipment() {
     this.equipEl.innerHTML = '';
+    const handsWrap = document.getElementById('hands-wrap');
+    handsWrap.innerHTML = '';
     const eq = this.G.player.equipment;
     for (const [slot, label] of SLOT_ORDER) {
       const cell = document.createElement('div');
@@ -219,7 +290,8 @@ export class Inventory {
         cell.append(icon, lbl);
         cell.addEventListener('pointerdown', (e) => this.startDrag(e, inst, { type: 'slot', slot }));
       }
-      this.equipEl.appendChild(cell);
+      // hands slot lives under the paper doll; the rest go to the right column
+      (slot === 'hands' ? handsWrap : this.equipEl).appendChild(cell);
     }
   }
 
@@ -332,9 +404,19 @@ export class Inventory {
   // find what is under the pointer; returns {kind, ...}
   hitTest(px, py) {
     for (const entry of this.grids) {
+      if (!inRect(visibleRect(entry.gridEl), px, py)) continue;
       const r = entry.gridEl.getBoundingClientRect();
-      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
+      {
         const d = this.drag;
+        // attachment hovering over a weapon tile → attach instead of place
+        if (d.inst.def.cat === 'attachment') {
+          const ux = (px - r.left) / this.cell, uy = (py - r.top) / this.cell;
+          const target = entry.grid.items.find((it) => it !== d.inst &&
+            ux >= it.x && ux < it.x + itemW(it) && uy >= it.y && uy < it.y + itemH(it));
+          if (target && target.def.cat === 'weapon') {
+            return { kind: 'attach', weapon: target, ok: attachmentFits(d.inst.def, target.def) };
+          }
+        }
         const w = d.rot ? d.inst.def.h : d.inst.def.w;
         const h = d.rot ? d.inst.def.w : d.inst.def.h;
         let cx = Math.round((px - r.left) / this.cell - w / 2);
@@ -344,21 +426,18 @@ export class Inventory {
         return { kind: 'grid', grid: entry.grid, gridEl: entry.gridEl, x: cx, y: cy };
       }
     }
-    for (const slotEl of this.equipEl.querySelectorAll('.equip-slot')) {
-      const r = slotEl.getBoundingClientRect();
-      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
+    for (const slotEl of this.el.querySelectorAll('.equip-slot')) {
+      if (inRect(visibleRect(slotEl), px, py)) {
         return { kind: 'slot', slot: slotEl.dataset.slot, slotEl };
       }
     }
     for (let i = 0; i < (this.qslotEls?.length ?? 0); i++) {
-      const r = this.qslotEls[i].getBoundingClientRect();
-      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
+      if (inRect(visibleRect(this.qslotEls[i]), px, py)) {
         return { kind: 'quick', index: i, el: this.qslotEls[i] };
       }
     }
     const vic = document.getElementById('inv-vicinity');
-    const vr = vic.getBoundingClientRect();
-    if (px >= vr.left && px <= vr.right && py >= vr.top && py <= vr.bottom) return { kind: 'vicinity' };
+    if (inRect(visibleRect(vic), px, py)) return { kind: 'vicinity' };
     return null;
   }
 
@@ -396,6 +475,8 @@ export class Inventory {
       const ok = d.src.type !== 'ground';
       hit.el.classList.toggle('drop-ok', ok);
       this.ghost.classList.toggle('bad', !ok);
+    } else if (hit.kind === 'attach') {
+      this.ghost.classList.toggle('bad', !hit.ok);
     } else if (hit.kind === 'vicinity') {
       document.getElementById('inv-vicinity').classList.add('drop-ok');
     }
@@ -423,15 +504,16 @@ export class Inventory {
   onDragEnd(e) {
     const d = this.drag;
     if (!d || e.pointerId !== d.pointerId) return;
-    this.drag = null;
     this.ghost.classList.remove('on');
     this.rotateBtn.classList.remove('on');
     this.clearHighlights();
     d.srcEl?.classList.remove('dragging-src');
 
-    if (!d.moved) { this.openSheet(d.inst, d.src); return; }
+    if (!d.moved) { this.drag = null; this.openSheet(d.inst, d.src); return; }
 
+    // hitTest reads this.drag, so clear it only after
     const hit = this.hitTest(e.clientX, e.clientY);
+    this.drag = null;
     const p = this.G.player;
     let done = false;
     if (hit) {
@@ -441,6 +523,20 @@ export class Inventory {
         d.inst.x = hit.x; d.inst.y = hit.y; d.inst.rot = d.rot;
         hit.grid.items.push(d.inst);
         done = true;
+      } else if (hit.kind === 'attach') {
+        if (hit.ok) {
+          this.removeFromSource(d);
+          p.attachTo(hit.weapon, d.inst);
+          done = true;
+        } else this.G.hud.toast("Doesn't fit this weapon");
+      } else if (hit.kind === 'slot' && d.inst.def.cat === 'attachment' &&
+        (hit.slot === 'hands' || hit.slot === 'shoulder') && p.equipment[hit.slot]?.def.cat === 'weapon') {
+        // drop an attachment onto an equipped weapon
+        if (attachmentFits(d.inst.def, p.equipment[hit.slot].def)) {
+          this.removeFromSource(d);
+          p.attachTo(p.equipment[hit.slot], d.inst);
+          done = true;
+        } else this.G.hud.toast("Doesn't fit this weapon");
       } else if (hit.kind === 'slot' && this.slotAccepts(hit.slot, d.inst)) {
         this.removeFromSource(d);
         if (hit.slot === 'shoulder') {
@@ -510,6 +606,12 @@ export class Inventory {
     if (d.cat === 'food') add('Eat', '', () => consumeAndCleanup((i) => p.consume(i)));
     if (d.cat === 'drink') add('Drink', '', () => consumeAndCleanup((i) => p.consume(i)));
     if (d.cat === 'medical') add('Use', '', () => consumeAndCleanup((i) => p.useMedical(i)));
+    if (d.usable === 'map') add('Read Map', '', () => { this.close(); this.G.showMap?.(); });
+    if (d.cat === 'weapon' && inst.attachments) {
+      for (const [aslot, aid] of Object.entries(inst.attachments)) {
+        if (aid) add(`Remove ${ITEMS[aid].name}`, '', () => p.detachFrom(inst, aslot));
+      }
+    }
     if ((d.cat === 'clothing' || d.cat === 'weapon' || d.cat === 'melee') && src.type !== 'slot') {
       add('Equip', '', () => {
         this.takeFrom(src, inst);
