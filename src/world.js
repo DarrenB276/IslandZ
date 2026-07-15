@@ -1,6 +1,7 @@
 // ================= World: terrain, town, props, colliders, ground items, FX =================
 import * as THREE from 'three';
 import { rollLoot, makeItem } from './items.js';
+import { itemMesh } from './models.js';
 
 const SIZE = 880;          // 4 chunks (2x2) — quadruple the play area
 const ISLAND_R = 360;      // island radius: beyond this the ground dives underwater
@@ -564,17 +565,25 @@ export class World {
   spawnGroundItem(inst, x, z) {
     const y = this.groundHeightSimple(x, z);
     const g = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.34),
-      new THREE.MeshLambertMaterial({ color: CAT_COLORS[inst.def.cat] ?? 0x777777 }));
-    base.position.y = 0.08;
-    base.castShadow = true;
-    g.add(base);
-    const sp = emojiSprite(inst.def.icon);
-    sp.position.y = 0.45;
-    g.add(sp);
+    const mesh = itemMesh(inst.def.id);        // real 3D model if the item has one
+    if (mesh) {
+      mesh.position.y = 0.16;
+      mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      g.add(mesh);
+      g.userData.model = mesh;
+    } else {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.34),
+        new THREE.MeshLambertMaterial({ color: CAT_COLORS[inst.def.cat] ?? 0x777777 }));
+      base.position.y = 0.08;
+      base.castShadow = true;
+      g.add(base);
+      const sp = emojiSprite(inst.def.icon);
+      sp.position.y = 0.45;
+      g.add(sp);
+    }
     g.position.set(x, y, z);
     this.scene.add(g);
-    const gi = { inst, mesh: g, x, z, y, bob: Math.random() * 6 };
+    const gi = { inst, mesh: g, x, z, y, bob: Math.random() * 6, hasModel: !!mesh };
     this.groundItems.push(gi);
     return gi;
   }
@@ -719,7 +728,7 @@ export class World {
     // item bobbing (only near player to save cycles)
     for (const gi of this.groundItems) {
       if (Math.abs(gi.x - playerPos.x) < 30 && Math.abs(gi.z - playerPos.z) < 30) {
-        gi.mesh.children[1].position.y = 0.45 + Math.sin(t * 2 + gi.bob) * 0.05;
+        if (!gi.hasModel) gi.mesh.children[1].position.y = 0.45 + Math.sin(t * 2 + gi.bob) * 0.05;
         gi.mesh.rotation.y = t * 0.5 + gi.bob;
       }
     }

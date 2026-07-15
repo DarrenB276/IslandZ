@@ -79,7 +79,8 @@ def({ id: 'beans', name: 'Canned Beans', icon: '🥫', w: 1, h: 1, cat: 'food', 
 def({ id: 'tuna', name: 'Canned Tuna', icon: '🥫', w: 1, h: 1, cat: 'food', energy: 28, water: 4, desc: 'Salty fish.' });
 def({ id: 'spaghetti', name: 'Canned Spaghetti', icon: '🥫', w: 1, h: 1, cat: 'food', energy: 40, water: 5, desc: 'Cold, but filling.' });
 def({ id: 'rice', name: 'Rice Bag', icon: '🍚', w: 2, h: 2, cat: 'food', energy: 70, water: -5, uses: 3, desc: 'Dry rice. Multiple servings.' });
-def({ id: 'apple', name: 'Apple', icon: '🍎', w: 1, h: 1, cat: 'food', energy: 12, water: 8, desc: 'Fresh fruit.' });
+def({ id: 'apple', name: 'Apple', icon: '🍎', w: 1, h: 1, cat: 'food', energy: 12, water: 8,
+  mesh: 'apple', meshSize: 0.22, desc: 'Fresh fruit.' });
 def({ id: 'chips', name: 'Potato Chips', icon: '🍟', w: 2, h: 1, cat: 'food', energy: 22, water: -6, desc: 'Crunchy. Thirsty work.' });
 def({ id: 'rotten_fruit', name: 'Rotten Fruit', icon: '🍏', w: 1, h: 1, cat: 'food', energy: 8, water: 4, sick: 0.45,
   desc: 'Smells wrong. Risk of cholera.' });

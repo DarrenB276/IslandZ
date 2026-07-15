@@ -1,7 +1,14 @@
 // ================= Tetris inventory: grid model + touch drag & drop UI =================
 import { itemW, itemH, ITEMS, attachmentFits } from './items.js';
+import { itemIcon } from './models.js';
 import { SFX } from './audio.js';
 import { STAT_PATHS } from './hud.js';
+
+// icon markup: rendered 3D thumbnail if the item has a mesh, else the emoji
+export function iconHTML(def) {
+  const url = itemIcon(def.id);
+  return url ? `<img src="${url}" alt="" style="width:88%;height:88%;object-fit:contain">` : def.icon;
+}
 
 const hex = (c) => '#' + (c ?? 0x777777).toString(16).padStart(6, '0');
 
@@ -248,7 +255,7 @@ export class Inventory {
     el.className = `${cls} cat-${inst.def.cat}`;
     const icon = document.createElement('div');
     icon.className = 'item-icon';
-    icon.textContent = inst.def.icon;
+    icon.innerHTML = iconHTML(inst.def);
     const label = document.createElement('div');
     label.className = 'item-label';
     label.textContent = inst.def.name;
@@ -283,7 +290,7 @@ export class Inventory {
       if (inst) {
         const icon = document.createElement('div');
         icon.className = 'item-icon';
-        icon.textContent = inst.def.icon;
+        icon.innerHTML = iconHTML(inst.def);
         const lbl = document.createElement('div');
         lbl.className = 'item-label';
         lbl.textContent = inst.def.name;

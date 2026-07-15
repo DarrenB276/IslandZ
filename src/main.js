@@ -15,6 +15,9 @@ import { Settings } from './settings.js';
 import { Bullets } from './bullets.js';
 import { createWeaponMesh, setFirstPersonBody, createViewmodelArms } from './character.js';
 import { initAudio } from './audio.js';
+import { preloadModels } from './models.js';
+
+await preloadModels(); // load item .glb meshes + build icon thumbnails before the world spawns loot
 
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
