@@ -160,16 +160,40 @@ export function setBoots(rig, def) {
   rig.footR.material.color.setHex(c);
 }
 
-// first-person now renders the SAME rig as third person (identical arms + weapon handling),
-// hiding only the head so it never fills the camera. Body, arms, weapon all stay visible.
+// first-person: keep the real torso + legs (so you see your body when you look down), but hide
+// the head and the real arms/held-weapon — a camera-attached viewmodel provides the arms + gun,
+// which always aim exactly where you look (no glitching when aiming up/down).
 export function setFirstPersonBody(rig, on) {
   rig.headG.visible = !on;
   rig.neck.visible = !on;
   rig.torso.visible = true;
-  rig.armL.visible = true;
-  rig.armR.visible = true;
+  rig.armL.visible = !on;
+  rig.armR.visible = !on;
   rig.vestMesh.visible = !!rig.vestMesh.userData.want;
-  if (rig.weaponMesh) rig.weaponMesh.visible = true;
+  if (rig.weaponMesh) rig.weaponMesh.visible = !on;
+}
+
+// viewmodel arms: two forearms + hands gripping the weapon, in the weapon's local space so they
+// track the weapon. gripL/gripR come from the weapon mesh userData.
+export function createViewmodelArms(gloveColor, sleeveColor, gripL, gripR) {
+  const g = new THREE.Group();
+  const skin = gloveColor ?? 0xd8a583;
+  const sleeve = sleeveColor ?? 0x6b7280;
+  const mkArm = (grip, side) => {
+    const arm = new THREE.Group();
+    const hand = box(0.1, 0.09, 0.12, skin);
+    hand.position.set(grip.x, grip.y, grip.z);
+    arm.add(hand);
+    const fore = box(0.085, 0.085, 0.3, sleeve);
+    fore.position.set(grip.x + side * 0.045, grip.y - 0.06, grip.z + 0.2);
+    fore.rotation.set(-0.6, side * 0.18, side * 0.12);
+    arm.add(fore);
+    return arm;
+  };
+  g.add(mkArm(gripR, 1));
+  g.add(mkArm(gripL, -1));
+  g.traverse((o) => { o.castShadow = false; });
+  return g;
 }
 
 export function setBackpack(rig, def) {

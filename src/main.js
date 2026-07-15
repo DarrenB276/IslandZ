@@ -13,7 +13,7 @@ import { HUD } from './hud.js';
 import { DevMode } from './dev.js';
 import { Settings } from './settings.js';
 import { Bullets } from './bullets.js';
-import { createWeaponMesh, setFirstPersonBody } from './character.js';
+import { createWeaponMesh, setFirstPersonBody, createViewmodelArms } from './character.js';
 import { initAudio } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -58,21 +58,74 @@ G.settings = new Settings(G);
 // auto-disable post FX if the device can't keep up
 let fpsAcc = 0, fpsN = 0, fpsGraceT = 0;
 
+// ================= first-person viewmodel (camera-attached, always aims where you look) =========
+const viewmodel = new THREE.Group();
+camera.add(viewmodel);
 scene.add(camera);
+let vmMesh = null, viewmodelSig = '';
+function refreshViewmodel() {
+  const w = G.player.weapon;
+  const sig = w ? `${w.uid}:${w.attachments ? Object.values(w.attachments).join(',') : ''}` : '';
+  if (sig === viewmodelSig) return;
+  viewmodelSig = sig;
+  viewmodel.clear();
+  vmMesh = null;
+  if (!w) return;
+  vmMesh = createWeaponMesh(w.def.id, w.attachments);
+  vmMesh.traverse((o) => { o.castShadow = false; });
+  if (w.def.cat === 'weapon' && vmMesh.userData.gripL) {
+    const e = G.player.equipment;
+    vmMesh.add(createViewmodelArms(e.gloves?.def.color ?? 0xd8a583, e.top?.def.color ?? 0xc8b8a0,
+      vmMesh.userData.gripL, vmMesh.userData.gripR));
+  }
+  viewmodel.add(vmMesh);
+}
+G.onWeaponVisualChanged = () => { viewmodelSig = '~'; };
 
-// world-space barrel tip of the held weapon (the SAME rig weapon in both views now)
+// per-weapon viewmodel fit so long guns (M249, VS98) don't fill the screen. [hipY, hipZ, adsZ]
+const VM_FIT = {
+  m249: { s: 0.82, z: -0.62 }, vs98: { s: 0.85, z: -0.6 }, remington: { s: 0.9, z: -0.5 },
+  vaiga: { s: 0.9, z: -0.5 }, akm: { s: 0.95, z: -0.48 }, m4a1: { s: 0.95, z: -0.46 }, mp5: { s: 1.0, z: -0.4 },
+};
+
+// world-space barrel tip of the shown weapon (FPP viewmodel / TPP rig weapon)
 const _muzzleTmp = new THREE.Vector3();
 G.getMuzzleWorld = () => {
-  const mesh = G.player.rig.weaponMesh;
+  const fpp = G.view === 'fpp' && !G.player.dead;
+  const mesh = fpp ? vmMesh : G.player.rig.weaponMesh;
   if (mesh && mesh.userData.muzzleLocal) {
     mesh.updateWorldMatrix(true, false);
     return mesh.localToWorld(_muzzleTmp.copy(mesh.userData.muzzleLocal)).clone();
   }
   return null;
 };
-G.onWeaponVisualChanged = () => {};
 
-// FPP weapon poses: idle tactical hold / hip-fire / ADS
+// pose the viewmodel: hip (angled, lower) vs ADS (sight raised to screen centre)
+function updateViewmodel(dt) {
+  if (!vmMesh) return;
+  const p = G.player, c = G.controls, w = p.weapon;
+  const fit = VM_FIT[w?.def.id] || { s: 0.95, z: -0.48 };
+  vmMesh.scale.setScalar(fit.s);
+  const aiming = c.aim;
+  let target;
+  if (aiming && w?.def.cat === 'weapon' && w.attachments && p.weaponScoped(w) === false) {
+    // ADS: put the sight (aimLocal) on the camera axis (screen centre), just ahead of the eye
+    const a = vmMesh.userData.aimLocal || new THREE.Vector3(0, 0.06, -0.05);
+    target = { x: -a.x * fit.s, y: -a.y * fit.s - 0.02, z: fit.z, rx: 0, ry: 0, rz: 0 };
+  } else {
+    target = { x: 0.16, y: -0.2, z: fit.z + 0.06, rx: 0.05, ry: 0.22, rz: 0.04 }; // hip/ready
+  }
+  const bob = Math.sin(performance.now() * 0.008) * Math.min(1, p.speed / 3) * 0.01;
+  const k = Math.min(1, dt * 12);
+  vmMesh.position.x = THREE.MathUtils.lerp(vmMesh.position.x, target.x, k);
+  vmMesh.position.y = THREE.MathUtils.lerp(vmMesh.position.y, target.y + bob, k);
+  vmMesh.position.z = THREE.MathUtils.lerp(vmMesh.position.z, target.z + p.recoil * 0.14, k);
+  vmMesh.rotation.x = THREE.MathUtils.lerp(vmMesh.rotation.x, target.rx - p.recoil * 0.35, k);
+  vmMesh.rotation.y = THREE.MathUtils.lerp(vmMesh.rotation.y, target.ry, k);
+  vmMesh.rotation.z = THREE.MathUtils.lerp(vmMesh.rotation.z, target.rz, k);
+  const fl = vmMesh.userData.flashlight;
+  if (fl) fl.intensity = (G.world.daylight ?? 1) < 0.4 ? 5 : 0;
+}
 
 // ================= camera =================
 const camState = { dist: 3.6, shoulder: 0.55, fov: 70 };
@@ -93,28 +146,19 @@ function updateCamera(dt) {
   const yaw = c.camYaw;
   const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-  // FPP renders the SAME rig as TPP (identical arms + weapon handling); only the head hides
   p.rig.group.visible = true;
   setFirstPersonBody(p.rig, fpp);
   const scopedADS = w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming;
-  // long-range scopes use the magnified overlay, so hide the weapon model then
-  if (p.rig.weaponMesh) p.rig.weaponMesh.visible = !(fpp && scopedADS);
+  // viewmodel: shown in FPP, hidden for long-range scope ADS (overlay used instead)
+  viewmodel.visible = fpp && !scopedADS;
 
   if (fpp) {
-    const wm = p.rig.weaponMesh;
-    // ADS with an in-view optic/irons: align the eye directly behind the sight so it's centred
-    if (aiming && w && w.def.cat === 'weapon' && !scopedADS && wm && wm.userData.aimLocal) {
-      wm.updateWorldMatrix(true, false);
-      const sight = wm.localToWorld(wm.userData.aimLocal.clone());
-      camera.position.copy(sight).addScaledVector(fwd, -0.24); // behind the glass so the optic shows
-      camera.lookAt(camera.position.clone().add(fwd));
-      return;
-    }
     const eyeY = p.pos.y + (p.swimming ? 1.15 : (EYE[p.stance] ?? 1.58)) + (p.climbT >= 0 ? 0.2 : 0);
-    // move the eye forward past the chest so the torso doesn't block the lower view
+    // eye forward past the chest so the torso doesn't block the lower view
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-    camera.position.set(p.pos.x + fx * 0.16, eyeY, p.pos.z + fz * 0.16);
+    camera.position.set(p.pos.x + fx * 0.22, eyeY, p.pos.z + fz * 0.22);
     camera.lookAt(camera.position.clone().add(fwd));
+    updateViewmodel(dt);
     return;
   }
 
@@ -326,6 +370,7 @@ function loop() {
     G.zombies.update(dt, elapsed);
     G.bullets.update(dt);
     G.world.update(dt, elapsed, G.player.pos, camera.position);
+    refreshViewmodel();
     updateCamera(dt);
     updateInteractPrompt(dt);
     G.hud.update(dt);
