@@ -155,7 +155,7 @@ svg { fill: currentColor; }
 #weapon-ammo .mode { font-size: .55em; font-weight: 600; opacity: .75; margin-left: 6px; letter-spacing: .1em; }
 
 /* ============ Inventory ============ */
-#inventory { position: absolute; inset: 0; z-index: 20; background: rgba(6, 9, 7, 0.45);
+#inventory { position: absolute; inset: 0; z-index: 20; background: rgba(8, 10, 11, 0.55);
   display: none; flex-direction: column; color: #dfe6dc;
   padding: calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) calc(8px + var(--safe-l)); }
 #inventory.open { display: flex; }
@@ -169,12 +169,14 @@ svg { fill: currentColor; }
   font-size: clamp(10px, 2vmin, 12px); }
 #inv-dev-btn.on { display: block; }
 #inv-body { flex: 1; display: flex; gap: 10px; overflow: hidden; }
-#inv-vicinity { flex: 0 0 clamp(130px, 24vmin, 200px); overflow-y: auto; padding: 4px;
-  background: rgba(10, 14, 12, 0.55); border-radius: 10px; }
+#inv-vicinity { flex: 0 0 clamp(130px, 24vmin, 200px); overflow-y: auto; padding: 6px;
+  background: rgba(20, 23, 25, 0.82); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; }
 #inv-center { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 4px 6px; overflow-y: auto; }
-#inv-right { flex: 1 1 auto; overflow-y: auto; padding: 4px 8px; min-width: 0;
-  background: rgba(10, 14, 12, 0.55); border-radius: 10px; }
+  gap: 8px; padding: 6px 8px; overflow-y: auto;
+  background: rgba(20, 23, 25, 0.82); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; }
+#inv-right { flex: 1 1 auto; overflow-y: auto; padding: 6px 10px; min-width: 0;
+  background: rgba(20, 23, 25, 0.82); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; }
+.inv-section-title { border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 4px; }
 @media (max-aspect-ratio: 5/6) {
   #inv-body { flex-direction: column; overflow-y: auto; }
   #inv-center { order: 0; } #inv-right { order: 1; } #inv-vicinity { order: 2; }
@@ -192,6 +194,14 @@ svg { fill: currentColor; }
 .doll-stat.warn svg, .doll-stat.warn .ds-val { fill: var(--warn); color: var(--warn); }
 .doll-stat.bad svg, .doll-stat.bad .ds-val { fill: var(--crit); color: var(--crit); }
 #hands-wrap .equip-slot { width: calc(var(--cell) * 2.4); height: calc(var(--cell) * 1.3); }
+#hands-attachments { margin-top: 6px; }
+.attach-row { display: flex; gap: 6px; justify-content: center; }
+.attach-slot { width: clamp(28px, 5vmin, 40px); height: clamp(28px, 5vmin, 40px); border-radius: 50%;
+  background: var(--panel-2); border: 1.5px dashed rgba(255,255,255,0.16); display: flex;
+  align-items: center; justify-content: center; overflow: hidden; }
+.attach-slot.filled { border-style: solid; border-color: rgba(159,202,106,0.45); }
+.attach-slot .item-icon { font-size: clamp(13px, 2.6vmin, 18px); display: flex; }
+.attach-slot .item-icon img { width: 88%; height: 88%; object-fit: contain; }
 .inv-section-title { font-size: clamp(10px, 1.9vmin, 12px); letter-spacing: .2em; opacity: .55;
   margin: 8px 2px 6px; font-weight: 700; }
 

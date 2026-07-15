@@ -300,6 +300,33 @@ export class Inventory {
       // hands slot lives under the paper doll; the rest go to the right column
       (slot === 'hands' ? handsWrap : this.equipEl).appendChild(cell);
     }
+    this.renderHandsAttachments();
+  }
+
+  // attachments row under HANDS — the held weapon's optic / underbarrel / muzzle / mag
+  renderHandsAttachments() {
+    const el = document.getElementById('hands-attachments');
+    el.innerHTML = '';
+    const w = this.G.player.equipment.hands;
+    if (!w || w.def.cat !== 'weapon' || !w.attachments) return;
+    const label = document.createElement('div');
+    label.className = 'inv-section-title';
+    label.textContent = 'ATTACHMENTS';
+    el.appendChild(label);
+    const row = document.createElement('div');
+    row.className = 'attach-row';
+    for (const slot of ['optic', 'under', 'muzzle', 'mag']) {
+      const aid = w.attachments[slot];
+      const c = document.createElement('div');
+      c.className = 'attach-slot' + (aid ? ' filled' : '');
+      c.title = slot;
+      if (aid) {
+        c.innerHTML = `<span class="item-icon">${iconHTML(ITEMS[aid])}</span>`;
+        c.addEventListener('pointerdown', (e) => { e.preventDefault(); this.G.player.detachFrom(w, slot); this.render(); });
+      }
+      row.appendChild(c);
+    }
+    el.appendChild(row);
   }
 
   renderContainers() {
