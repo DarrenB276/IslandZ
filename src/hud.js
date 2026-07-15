@@ -59,6 +59,18 @@ export class HUD {
     this.compassStrip.innerHTML = html;
   }
 
+  // fire button turns into a USE button (with a progress ring) while holding a consumable
+  updateUseButton() {
+    const p = this.G.player;
+    const fire = document.getElementById('btn-fire');
+    if (!fire) return;
+    const held = p.heldConsumable;
+    fire.classList.toggle('use-mode', !!held);
+    const active = !!p.usingItem;
+    fire.classList.toggle('use-active', active);
+    if (active) document.getElementById('use-ring').style.setProperty('--p', (p.useProgress || 0).toFixed(3));
+  }
+
   updateCompass() {
     if (!this.hasCompass) { this.compassBar.classList.remove('on'); return; }
     this.compassBar.classList.add('on');
@@ -94,6 +106,7 @@ export class HUD {
 
   update(dt) {
     this.updateCompass(); // every frame: heading must track the camera smoothly
+    this.updateUseButton();
     this.tick -= dt;
     if (this.tick > 0) return;
     this.tick = 0.2;

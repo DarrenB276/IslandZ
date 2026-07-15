@@ -139,7 +139,8 @@ export class Controls {
     press('btn-swap', () => this.emit('swap'));
     press('btn-view', () => this.emit('view'));
     press('btn-menu', () => this.emit('menu'));
-    press('btn-interact', () => this.emit('interact'));
+    press('btn-take', () => this.emit('interact'));
+    press('btn-take-hands', () => this.emit('interact-hands'));
   }
 
   setAim(v) {
@@ -162,6 +163,7 @@ export class Controls {
         case 'KeyC': this.emit('crouch'); break;
         case 'KeyZ': this.emit('prone'); break;
         case 'KeyF': this.emit('interact'); break;
+        case 'KeyH': this.emit('interact-hands'); break;
         case 'Tab': case 'KeyI': this.emit('inventory'); e.preventDefault(); break;
         case 'KeyX': this.emit('swap'); break;
         case 'KeyV': this.emit('view'); break;
@@ -215,10 +217,10 @@ export class Controls {
   }
 
   setInteract(label) {
-    const btn = document.getElementById('btn-interact');
+    const p = document.getElementById('pickup-prompt');
     if (label) {
-      document.getElementById('interact-label').textContent = label;
-      btn.classList.add('show');
-    } else btn.classList.remove('show');
+      document.getElementById('pickup-name').textContent = label;
+      p.classList.add('show');
+    } else p.classList.remove('show');
   }
 }

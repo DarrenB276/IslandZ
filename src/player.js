@@ -4,6 +4,7 @@ import { createHumanoid, animateHumanoid, createWeaponMesh, attachWeapon,
   setClothingColors, setHeadgear, setMask, setVest, setBackpack, setBoots } from './character.js';
 import { makeItem, ITEMS, attachmentFits } from './items.js';
 import { SEA_LEVEL } from './world.js';
+import { itemMesh } from './models.js';
 import { SFX } from './audio.js';
 
 const SPEEDS = { prone: 0.7, crouch: 1.4, walk: 1.8, jog: 3.4, run: 5.6, swim: 1.7 };
@@ -88,12 +89,19 @@ export class Player {
     let slot = null;
     if (d.cat === 'clothing') slot = d.slot;
     else if (d.cat === 'weapon' || d.cat === 'melee') slot = 'hands';
+    else slot = 'hands'; // food / drink / medical / utility can be held in hands
     if (!slot) return null;
     const prev = this.equipment[slot];
     this.equipment[slot] = inst;
     this.applyLook();
     if (!silent) SFX.equip();
     return prev ?? null;
+  }
+
+  // is the held item a consumable that the Use button should act on?
+  get heldConsumable() {
+    const h = this.equipment.hands;
+    return h && (h.def.cat === 'food' || h.def.cat === 'drink' || h.def.cat === 'medical') ? h : null;
   }
 
   unequip(slot) {
@@ -123,13 +131,23 @@ export class Player {
     setBackpack(this.rig, e.back?.def);
     setBoots(this.rig, e.feet?.def);
     const w = e.hands;
-    if (w) attachWeapon(this.rig, createWeaponMesh(w.def.id, w.attachments), w.def.cat === 'weapon');
-    else attachWeapon(this.rig, null, false);
+    if (w && (w.def.cat === 'weapon' || w.def.cat === 'melee')) {
+      attachWeapon(this.rig, createWeaponMesh(w.def.id, w.attachments), w.def.cat === 'weapon');
+    } else if (w) {
+      // held consumable / utility: show its 3D model (or a small box) in the hand
+      const m = itemMesh(w.def.id) || new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.12, 0.12), new THREE.MeshLambertMaterial({ color: 0x9a7a4a }));
+      attachWeapon(this.rig, m, false);
+    } else attachWeapon(this.rig, null, false);
     this.G.hud?.refreshWeapon();
     this.G.onWeaponVisualChanged?.();
   }
 
-  get weapon() { return this.equipment.hands; }
+  // only weapons/melee count as the combat "weapon"; consumables are just held
+  get weapon() {
+    const h = this.equipment.hands;
+    return h && (h.def.cat === 'weapon' || h.def.cat === 'melee') ? h : null;
+  }
 
   // ---- attachment-aware weapon stats ----
   weaponMag(w) {
@@ -246,9 +264,34 @@ export class Player {
   // ================= combat =================
   pullTrigger() {
     if (this.dead || this.climbT >= 0 || this.reloading > 0 || this.swimming) return;
+    if (this.heldConsumable) return; // consumables use the hold-to-use flow, not the trigger
     const w = this.weapon;
     if (w && w.def.cat === 'weapon') this.tryShoot();
     else this.tryMelee();
+  }
+
+  // ---- hold-to-use (eat / drink / apply), DayZ-style with a progress ring ----
+  updateUse(dt) {
+    const held = this.heldConsumable;
+    const wantUse = (this.G.controls.firing || this.G.controls.hipFiring) && held && !this.dead;
+    if (wantUse) {
+      this.useT = (this.useT || 0) + dt;
+      const dur = held.def.cat === 'medical' ? 3.5 : held.def.cat === 'drink' ? 3 : 2.5;
+      if (this.useT >= dur) {
+        this.useT = 0;
+        const gone = held.def.cat === 'medical' ? this.useMedical(held) : this.consume(held);
+        if (gone) { this.equipment.hands = null; this.applyLook(); }
+        else this.applyLook();
+        this.G.hud.refreshWeapon();
+        if (this.G.inventory.isOpen) this.G.inventory.render();
+      }
+    } else {
+      this.useT = 0;
+    }
+    // progress 0..1 for the HUD ring
+    const dur = held ? (held.def.cat === 'medical' ? 3.5 : held.def.cat === 'drink' ? 3 : 2.5) : 1;
+    this.useProgress = wantUse ? this.useT / dur : 0;
+    this.usingItem = wantUse;
   }
 
   tryShoot() {
@@ -597,6 +640,7 @@ export class Player {
     }
     if (G.controls.firing || G.controls.hipFiring) this.pullTrigger();
     else this.triggerHeld = false;
+    this.updateUse(dt);
     this.recoil = Math.max(0, this.recoil - dt * 2.2);
 
     // weapon flashlight follows darkness
@@ -624,6 +668,7 @@ export class Player {
       attackT: this.attackT,
       swimming: this.swimming,
       groundSlope: this.groundSlope,
+      using: this.usingItem ? (this.useProgress || 0) : null,
     });
   }
 

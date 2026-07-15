@@ -52,7 +52,14 @@
   </div>
 
   <!-- interact prompt -->
-  <button id="btn-interact"><span class="key">TAKE</span><span id="interact-label"></span></button>
+  <!-- DayZ-style pickup prompt -->
+  <div id="pickup-prompt">
+    <div id="pickup-name"></div>
+    <div class="pickup-actions">
+      <button id="btn-take"><span class="key">F</span> Take</button>
+      <button id="btn-take-hands"><span class="key">H</span> To Hands</button>
+    </div>
+  </div>
 
   <!-- stamina bar -->
   <div id="stamina-wrap"><div id="stamina-bar"></div></div>
@@ -89,7 +96,9 @@
       <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.1a7 7 0 0 0-5.9-5.9V3h-2v2.1A7 7 0 0 0 5.1 11H3v2h2.1a7 7 0 0 0 5.9 5.9V21h2v-2.1a7 7 0 0 0 5.9-5.9H21v-2z"/></svg>
     </button>
     <button class="hud-btn big" id="btn-fire">
-      <svg viewBox="0 0 24 24"><path d="M21 6H3v5h2v3h3l1 7h3l-1-7h1.5c.8 0 1.5-.7 1.5-1.5V11h7V6zM4.5 9.5v-2h1v2h-1z"/></svg>
+      <div id="use-ring"></div>
+      <svg class="fire-ic" viewBox="0 0 24 24"><path d="M21 6H3v5h2v3h3l1 7h3l-1-7h1.5c.8 0 1.5-.7 1.5-1.5V11h7V6zM4.5 9.5v-2h1v2h-1z"/></svg>
+      <span class="use-label">USE</span>
     </button>
     <button class="hud-btn" id="btn-hipfire" title="Hip fire (stay third person)">
       <svg viewBox="0 0 24 24"><path d="M21 6H3v5h2v3h3l1 7h3l-1-7h1.5c.8 0 1.5-.7 1.5-1.5V11h7V6z"/><circle cx="12" cy="8.5" r="1.4" fill="#000" opacity=".5"/></svg>

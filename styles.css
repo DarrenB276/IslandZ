@@ -67,7 +67,15 @@ svg { fill: currentColor; }
 .hud-btn svg { width: 52%; height: 52%; }
 .hud-btn:active { background: rgba(160, 200, 120, 0.3); transform: scale(0.94); }
 .hud-btn.small { width: calc(var(--hud-btn) * 0.78); height: calc(var(--hud-btn) * 0.78); border-radius: 14px; }
-.hud-btn.big { width: calc(var(--hud-btn) * 1.5); height: calc(var(--hud-btn) * 1.5); }
+.hud-btn.big { width: calc(var(--hud-btn) * 1.5); height: calc(var(--hud-btn) * 1.5); position: relative; }
+#btn-fire .use-label { display: none; font-weight: 800; letter-spacing: .05em; font-size: clamp(12px, 2.4vmin, 15px); }
+#btn-fire.use-mode .fire-ic { display: none; }
+#btn-fire.use-mode .use-label { display: block; }
+#btn-fire.use-mode { border-color: var(--accent); }
+#use-ring { position: absolute; inset: -4px; border-radius: 50%; display: none; pointer-events: none;
+  background: conic-gradient(var(--accent) calc(var(--p, 0) * 360deg), transparent 0); }
+#btn-fire.use-active #use-ring { display: block; -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px)); }
 .hud-btn.active { background: rgba(159, 202, 106, 0.35); border-color: var(--accent); color: #fff; }
 .hud-btn.flash { animation: btnflash .5s infinite alternate; }
 @keyframes btnflash { from { border-color: rgba(255,255,255,0.25); } to { border-color: var(--crit); } }
@@ -92,13 +100,20 @@ svg { fill: currentColor; }
 #btn-crouch { position: absolute; right: clamp(140px, 27vmin, 225px); bottom: clamp(84px, 17vmin, 145px); }
 #btn-prone  { position: absolute; right: 2px; bottom: clamp(4px, 1.5vmin, 16px); }
 
-#btn-interact { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%);
-  display: none; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 10px;
-  background: rgba(12, 16, 13, 0.8); border: 1.5px solid var(--accent); color: #eef3ea;
-  font-size: clamp(13px, 2.4vmin, 16px); }
-#btn-interact.show { display: flex; }
-#btn-interact .key { background: var(--accent); color: #14210c; font-weight: 800; border-radius: 6px;
-  padding: 3px 8px; font-size: .85em; }
+#pickup-prompt { position: absolute; left: 50%; bottom: 26%; transform: translateX(-50%);
+  display: none; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+#pickup-prompt.show { display: flex; }
+#pickup-name { color: #eef3ea; font-size: clamp(13px, 2.5vmin, 16px); font-weight: 700;
+  text-shadow: 0 1px 4px #000; letter-spacing: .04em; }
+.pickup-actions { display: flex; gap: 10px; pointer-events: auto; }
+.pickup-actions button { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 9px;
+  background: rgba(12, 16, 13, 0.82); border: 1.5px solid rgba(255,255,255,0.28); color: #eef3ea;
+  font-size: clamp(12px, 2.3vmin, 15px); }
+.pickup-actions button:active { background: rgba(159,202,106,0.3); }
+.pickup-actions #btn-take { border-color: var(--accent); }
+.pickup-actions .key { background: #2a3226; color: #cfe0b8; font-weight: 800; border-radius: 5px;
+  padding: 2px 7px; font-size: .82em; }
+#btn-take .key { background: var(--accent); color: #14210c; }
 
 #stamina-wrap { position: absolute; left: 50%; bottom: calc(12px + var(--safe-b)); transform: translateX(-50%);
   width: clamp(140px, 26vmin, 240px); height: 5px; background: rgba(0,0,0,0.5); border-radius: 3px;

@@ -223,7 +223,7 @@ function syncOverlays() {
   document.getElementById('hud').classList.toggle('hidden', G.inventory.isOpen);
   G.controls.enabled = !G.inventory.isOpen && started && !G.player.dead;
 }
-G.controls.on('interact', () => {
+G.controls.on('interact', () => {          // Take → stash into inventory
   if (G.paused) return;
   const near = G.world.itemsNear(G.player.pos, 2.2);
   if (!near.length) return;
@@ -234,6 +234,16 @@ G.controls.on('interact', () => {
   } else {
     G.hud.toast('No room for ' + gi.inst.def.name);
   }
+});
+G.controls.on('interact-hands', () => {    // Take to Hands → hold the item
+  if (G.paused) return;
+  const near = G.world.itemsNear(G.player.pos, 2.2);
+  if (!near.length) return;
+  const { gi } = near[0];
+  const prev = G.player.equip(gi.inst);    // equip returns whatever was in the hands slot
+  G.world.removeGroundItem(gi);
+  if (prev) G.inventory.stashOrDrop(prev);
+  G.hud.toast('In hands: ' + gi.inst.def.name);
 });
 
 // ================= island map overlay =================

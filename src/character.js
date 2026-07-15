@@ -589,6 +589,11 @@ export function animateHumanoid(rig, dt, p) {
       armRZ = -0.15 - strike * 0.2;
       torsoLean += strike * 0.25;
     }
+  } else if (p.using != null && !p.zombie) {
+    // eating/drinking/using: raise the right hand to the mouth with a small bob
+    const b = Math.sin(p.using * Math.PI * 6) * 0.12;
+    armRX = 2.15 + b; armRZ = -0.35; elbR = 1.5;
+    headX = 0.15;
   } else if (!rig.meleePose && !rig.gunPose && p.attackT != null && !p.zombie) {
     // fists: jab extends the elbow
     const a = p.attackT;
