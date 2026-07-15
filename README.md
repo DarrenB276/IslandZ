@@ -91,6 +91,18 @@ and a **spawn list of every registered item**. The red button at the bottom of t
 
 **Mobile HUD** — adaptive layout (`vmin`/`clamp()` + safe-area insets), floating joystick, touch-look, contextual pickup prompt, hit markers, damage/blood-loss screen effects, sniper scope overlay.
 
+## Model Editor
+
+A standalone BlockBench-style editor ships at **`editor.html`** (link on the start screen). It:
+
+- **detects every registered item** (weapons, attachments, clothing, food, medical, …) in a searchable library;
+- loads a weapon's **actual in-game geometry** as editable box/cylinder parts (or starts blank for other items);
+- lets you **add / duplicate / delete parts**, transform them with a move/rotate/scale gizmo or numeric fields, and recolour them from a palette or picker;
+- edits **weapon points** — muzzle, left/right grips, sight/aim, and custom attachment points — shown as draggable markers;
+- **exports** to **GLB** (`.glb`, opens in Blender → one-click FBX), **OBJ**, and a native **game JSON** that re-imports for continued editing.
+
+> Note: reliable FBX can't be hand-written in the browser, so the editor exports glTF/OBJ/JSON instead — glTF is the standard interchange and Blender imports it directly. Freeform sculpt/extrude/cut, UV paint-texturing, and a full animation timeline are planned follow-ups.
+
 ## Multiplayer status
 
 The game is single-player today, prepared for multiplayer: `src/net.js` defines the

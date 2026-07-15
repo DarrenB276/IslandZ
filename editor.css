@@ -1,0 +1,75 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #14181a; --panel: #1c2124; --panel2: #252b2f; --line: #333a3e;
+  --accent: #9fca6a; --text: #dfe6dc; --muted: #8a938c; --danger: #d84a3a;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: "Segoe UI", Roboto, system-ui, sans-serif; overflow: hidden; }
+button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+button:hover { background: #303840; }
+button.on { background: rgba(159,202,106,0.25); border-color: var(--accent); color: #fff; }
+button.danger { border-color: rgba(216,74,58,0.5); color: #f0a094; }
+input { font: inherit; color: var(--text); background: #12161800; }
+
+#app { display: grid; height: 100%;
+  grid-template-columns: 240px 1fr 300px; grid-template-rows: 48px 1fr;
+  grid-template-areas: "top top top" "lib view insp"; }
+#topbar { grid-area: top; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 800; letter-spacing: .08em; }
+.brand span { color: var(--danger); }
+.spacer { flex: 1; }
+.gizmo-modes, .exports { display: flex; gap: 6px; }
+.exports button { border-color: rgba(159,202,106,0.4); }
+
+#library { grid-area: lib; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden; }
+#inspector { grid-area: insp; background: var(--panel); border-left: 1px solid var(--line);
+  overflow-y: auto; padding-bottom: 30px; }
+.panel-title { font-size: 11px; letter-spacing: .16em; color: var(--muted); font-weight: 700;
+  padding: 12px 12px 6px; }
+.panel-title .sub { font-weight: 400; letter-spacing: 0; text-transform: none; }
+#item-search { margin: 6px 10px; padding: 7px 9px; background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 6px; }
+#item-list { overflow-y: auto; flex: 1; padding: 4px 6px; }
+.item-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+  cursor: pointer; font-size: 13px; }
+.item-row:hover { background: var(--panel2); }
+.item-row.on { background: rgba(159,202,106,0.22); }
+.item-row .ic { width: 18px; text-align: center; }
+.item-row .cat { margin-left: auto; font-size: 10px; color: var(--muted); }
+
+#viewport { grid-area: view; position: relative; }
+#view { width: 100%; height: 100%; display: block; }
+#vp-info, #vp-hint { position: absolute; font-size: 12px; color: var(--muted);
+  background: rgba(10,14,12,0.6); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+#vp-info { top: 10px; left: 10px; }
+#vp-hint { bottom: 10px; left: 50%; transform: translateX(-50%); }
+
+.row.btns { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 8px; }
+.row.btns button { flex: 1 1 auto; }
+#part-list, #point-list { padding: 0 8px; }
+.part-row, .point-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+  cursor: pointer; font-size: 13px; }
+.part-row:hover, .point-row:hover { background: var(--panel2); }
+.part-row.on { background: rgba(159,202,106,0.22); }
+.part-row .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0006; }
+.part-row .del, .point-row .del { margin-left: auto; opacity: .5; padding: 2px 6px; }
+.part-row .del:hover { opacity: 1; }
+
+.hidden { display: none; }
+.prop-grid { display: grid; grid-template-columns: 16px 1fr 1fr 1fr; gap: 5px 6px; padding: 4px 12px; align-items: center; }
+.prop-grid .lbl { font-size: 12px; color: var(--muted); }
+.prop-grid input { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px;
+  padding: 5px 4px; width: 100%; font-size: 12px; text-align: right; }
+#palette { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; padding: 4px 12px; }
+#palette .sw { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 1px solid #0004; }
+#palette .sw:hover { outline: 2px solid var(--accent); }
+#color-picker { width: calc(100% - 24px); margin: 8px 12px; height: 30px; background: none; border: none; cursor: pointer; }
+.point-row input { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px;
+  padding: 3px 6px; width: 84px; font-size: 12px; }
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--panel2); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 18px;
+  opacity: 0; transition: opacity .3s; pointer-events: none; }
+#toast.show { opacity: 1; }
