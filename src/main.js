@@ -13,7 +13,7 @@ import { HUD } from './hud.js';
 import { DevMode } from './dev.js';
 import { Settings } from './settings.js';
 import { Bullets } from './bullets.js';
-import { createWeaponMesh, setFirstPersonBody, createViewmodelArms } from './character.js';
+import { createWeaponMesh, setFirstPersonBody } from './character.js';
 import { initAudio } from './audio.js';
 
 const canvas = document.getElementById('game');
@@ -58,75 +58,21 @@ G.settings = new Settings(G);
 // auto-disable post FX if the device can't keep up
 let fpsAcc = 0, fpsN = 0, fpsGraceT = 0;
 
-// ================= first-person viewmodel =================
-const viewmodel = new THREE.Group();
-camera.add(viewmodel);
 scene.add(camera);
-let viewmodelSig = '';
-let vmMesh = null;
-function refreshViewmodel() {
-  const w = G.player.weapon;
-  const sig = w ? `${w.uid}:${w.attachments ? Object.values(w.attachments).join(',') : ''}` : '';
-  if (sig === viewmodelSig) return;
-  viewmodelSig = sig;
-  viewmodel.clear();
-  vmMesh = null;
-  if (!w) return;
-  vmMesh = createWeaponMesh(w.def.id, w.attachments);
-  vmMesh.traverse((o) => { o.castShadow = false; }); // don't catch the sun-shadow camera
-  // modeled arms gripping the weapon (so FPP shows your arms holding the gun)
-  if (w.def.cat === 'weapon' && vmMesh.userData.gripL) {
-    const e = G.player.equipment;
-    const glove = e.gloves?.def.color ?? 0xd8a583;
-    const sleeve = e.top?.def.color ?? 0xc8b8a0;
-    vmMesh.add(createViewmodelArms(glove, sleeve, vmMesh.userData.gripL, vmMesh.userData.gripR));
-  }
-  viewmodel.add(vmMesh);
-}
-G.onWeaponVisualChanged = () => { viewmodelSig = '~'; }; // force rebuild next frame
 
-// world-space barrel tip of whichever weapon mesh is shown (FPP viewmodel or TPP rig weapon)
+// world-space barrel tip of the held weapon (the SAME rig weapon in both views now)
 const _muzzleTmp = new THREE.Vector3();
 G.getMuzzleWorld = () => {
-  const fpp = G.view === 'fpp' && !G.player.dead;
-  const mesh = fpp ? vmMesh : G.player.rig.weaponMesh;
+  const mesh = G.player.rig.weaponMesh;
   if (mesh && mesh.userData.muzzleLocal) {
     mesh.updateWorldMatrix(true, false);
     return mesh.localToWorld(_muzzleTmp.copy(mesh.userData.muzzleLocal)).clone();
   }
   return null;
 };
+G.onWeaponVisualChanged = () => {};
 
 // FPP weapon poses: idle tactical hold / hip-fire / ADS
-const VM_POSES = {
-  idle: { pos: [0.24, -0.28, -0.5], rot: [0.18, 0.28, 0.05] },   // patrol/ready, angled in
-  hip: { pos: [0.2, -0.24, -0.55], rot: [0.02, 0.05, 0] },
-  ads: { pos: [0, -0.108, -0.34], rot: [0, 0, 0] },              // sight raised to eye centre
-  melee: { pos: [0.3, -0.34, -0.5], rot: [0.5, 0, -0.25] },
-};
-let lastFireInput = -10;
-
-function updateViewmodelPose(dt) {
-  if (!vmMesh) return;
-  const p = G.player, c = G.controls;
-  const w = p.weapon;
-  let pose = VM_POSES.melee;
-  if (w && w.def.cat === 'weapon') {
-    const now = performance.now() / 1000;
-    if (c.firing) lastFireInput = now;
-    if (c.aim) pose = VM_POSES.ads;
-    else if (now - lastFireInput < 1.4 || p.reloading > 0) pose = VM_POSES.hip;
-    else pose = VM_POSES.idle;
-  }
-  const k = Math.min(1, dt * 10);
-  vmMesh.position.lerp(new THREE.Vector3(...pose.pos), k);
-  vmMesh.rotation.x = THREE.MathUtils.lerp(vmMesh.rotation.x, pose.rot[0], k);
-  vmMesh.rotation.y = THREE.MathUtils.lerp(vmMesh.rotation.y, pose.rot[1], k);
-  vmMesh.rotation.z = THREE.MathUtils.lerp(vmMesh.rotation.z, pose.rot[2], k);
-  // flashlight on the viewmodel follows darkness too
-  const fl = vmMesh.userData.flashlight;
-  if (fl) fl.intensity = (G.world.daylight ?? 1) < 0.4 ? 5 : 0;
-}
 
 // ================= camera =================
 const camState = { dist: 3.6, shoulder: 0.55, fov: 70 };
@@ -147,19 +93,28 @@ function updateCamera(dt) {
   const yaw = c.camYaw;
   const fwd = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 
-  // FPP: viewmodel arms+weapon in view, real torso+legs visible below (look down to see your body)
+  // FPP renders the SAME rig as TPP (identical arms + weapon handling); only the head hides
   p.rig.group.visible = true;
   setFirstPersonBody(p.rig, fpp);
   const scopedADS = w && w.def.cat === 'weapon' && p.weaponScoped(w) && aiming;
-  viewmodel.visible = fpp && !scopedADS; // long-range scope uses the overlay, hide the model then
+  // long-range scopes use the magnified overlay, so hide the weapon model then
+  if (p.rig.weaponMesh) p.rig.weaponMesh.visible = !(fpp && scopedADS);
 
   if (fpp) {
+    const wm = p.rig.weaponMesh;
+    // ADS with an in-view optic/irons: align the eye directly behind the sight so it's centred
+    if (aiming && w && w.def.cat === 'weapon' && !scopedADS && wm && wm.userData.aimLocal) {
+      wm.updateWorldMatrix(true, false);
+      const sight = wm.localToWorld(wm.userData.aimLocal.clone());
+      camera.position.copy(sight).addScaledVector(fwd, -0.24); // behind the glass so the optic shows
+      camera.lookAt(camera.position.clone().add(fwd));
+      return;
+    }
     const eyeY = p.pos.y + (p.swimming ? 1.15 : (EYE[p.stance] ?? 1.58)) + (p.climbT >= 0 ? 0.2 : 0);
-    camera.position.set(p.pos.x, eyeY, p.pos.z); // at the eyes
+    // move the eye forward past the chest so the torso doesn't block the lower view
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    camera.position.set(p.pos.x + fx * 0.16, eyeY, p.pos.z + fz * 0.16);
     camera.lookAt(camera.position.clone().add(fwd));
-    updateViewmodelPose(dt);
-    const bob = Math.sin(performance.now() * 0.008) * Math.min(1, p.speed / 3) * 0.012;
-    viewmodel.position.set(0, bob, p.recoil * 0.12);
     return;
   }
 
@@ -375,7 +330,6 @@ function loop() {
     updateInteractPrompt(dt);
     G.hud.update(dt);
     G.dev.update();
-    refreshViewmodel();
 
     // auto-disable bloom if fps is poor for a sustained period
     fpsGraceT += dt;

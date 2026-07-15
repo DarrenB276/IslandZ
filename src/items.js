@@ -28,7 +28,7 @@ def({ id: 'mp5', name: 'MP5-K', icon: '𝗠𝗣', w: 4, h: 2, cat: 'weapon', lon
   ammo: 'ammo_9mm', mag: 30, dmg: 21, rpm: 820, auto: true, spread: 0.03, zoom: 55, noise: 70,
   desc: '9mm submachine gun.' });
 def({ id: 'm249', name: 'M249 SAW', icon: '𝗠𝟮', w: 6, h: 2, cat: 'weapon', long: true,
-  ammo: 'ammo_556', mag: 100, dmg: 30, rpm: 750, auto: true, spread: 0.04, zoom: 50, noise: 110,
+  ammo: 'ammo_556', mag: 100, dmg: 30, rpm: 750, auto: true, spread: 0.024, zoom: 50, noise: 110,
   desc: '5.56 light machine gun. 100-round belt.' });
 
 // ---------- Weapon attachments ----------

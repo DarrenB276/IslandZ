@@ -270,25 +270,48 @@ export class Player {
     const yaw = G.controls.camYaw, pitch = G.controls.camPitch - this.recoil * 0.5;
     const aimDir = new THREE.Vector3(
       -Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)).normalize();
-    // eye/crosshair origin, then a convergence point far down the aim ray
+    // eye/crosshair origin
     const eye = this.pos.clone();
     eye.y += this.stance === 'prone' ? 0.5 : this.stance === 'crouch' ? 1.15 : 1.58;
-    const aimPoint = eye.clone().addScaledVector(aimDir, 160);
 
-    // bullets actually leave the barrel tip
+    // resolve what the crosshair is actually over, so bullets converge there (no muzzle parallax):
+    // nearest zombie hit along the eye ray, else terrain, else far.
+    let aimDist = 300;
+    for (const z of G.zombies.list) {
+      if (z.dead) continue;
+      const c = new THREE.Vector3(z.pos.x, z.pos.y + 1.2, z.pos.z).sub(eye);
+      const t = c.dot(aimDir);
+      if (t < 0.5 || t > aimDist) continue;
+      if (c.lengthSq() - t * t < 0.6 * 0.6) aimDist = t;
+    }
+    for (let d = 2; d < aimDist; d += 2) {          // terrain intercept
+      const px = eye.x + aimDir.x * d, pz = eye.z + aimDir.z * d, py = eye.y + aimDir.y * d;
+      if (py < G.world.groundHeightSimple(px, pz)) { aimDist = d; break; }
+    }
+    const aimPoint = eye.clone().addScaledVector(aimDir, aimDist);
+
+    // bullets actually leave the barrel tip, aimed at the crosshair's target point
     const muzzle = (G.getMuzzleWorld && G.getMuzzleWorld()) || eye.clone().addScaledVector(aimDir, 0.6);
     const dir = aimPoint.clone().sub(muzzle).normalize();
 
     if (!suppressor) G.world.addFlash(muzzle.clone().addScaledVector(dir, 0.12));
 
+    // first shot of a burst is accurate; sustained fire opens up (DayZ-style).
+    const now = performance.now() / 1000;
+    if (now - (this._lastShot || 0) > 0.32) this.shotStreak = 0;
+    else this.shotStreak = Math.min(9, (this.shotStreak || 0) + 1);
+    this._lastShot = now;
+
     const shots = w.def.pellets ?? 1;
-    let spread = w.def.spread * (G.controls.aim ? 1 : 2.6);
+    // aimed = tight (weapon's inherent), hip = looser; shotguns keep their pellet pattern
+    let spread = w.def.spread * (w.def.pellets ? 1 : (G.controls.aim ? 0.32 : 1.25));
+    if (!w.def.pellets) spread *= 1 + this.shotStreak * 0.16;   // climb with sustained fire
     const under = w.attachments?.under ? ITEMS[w.attachments.under] : null;
     if (under?.spreadMul) spread *= under.spreadMul;
     if (under?.hipSpreadMul && !G.controls.aim) spread *= under.hipSpreadMul;
-    if (this.stance === 'crouch') spread *= 0.75;
-    if (this.stance === 'prone') spread *= 0.55;
-    if (this.speed > 0.5) spread *= 1.6;
+    if (this.stance === 'crouch') spread *= 0.8;
+    if (this.stance === 'prone') spread *= 0.6;
+    if (this.speed > 0.5) spread *= 1.5;
     if (this.painkiller > 0) spread *= 0.7;
 
     // ballistics per weapon class: muzzle velocity (m/s) + gravity drop scale
@@ -595,6 +618,7 @@ export class Player {
       stance: this.stance,
       speed: this.speed,
       aiming: G.controls.aim,
+      camPitch: G.controls.camPitch,
       jumping: !this.grounded && !this.swimming,
       climbing: this.climbT >= 0 ? this.climbT : null,
       attackT: this.attackT,

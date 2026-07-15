@@ -160,41 +160,16 @@ export function setBoots(rig, def) {
   rig.footR.material.color.setHex(c);
 }
 
-// first-person: show the real torso + legs (so you see your body/chest/legs when you look down),
-// but hide the head and the real arms/held-weapon — the viewmodel provides the arms + gun in view.
+// first-person now renders the SAME rig as third person (identical arms + weapon handling),
+// hiding only the head so it never fills the camera. Body, arms, weapon all stay visible.
 export function setFirstPersonBody(rig, on) {
   rig.headG.visible = !on;
   rig.neck.visible = !on;
-  rig.armL.visible = !on;
-  rig.armR.visible = !on;
   rig.torso.visible = true;
-  rig.vestMesh.visible = on ? false : !!rig.vestMesh.userData.want;
-  if (rig.weaponMesh) rig.weaponMesh.visible = !on; // viewmodel shows the weapon in FPP
-}
-
-// viewmodel arms: two forearms + hands gripping the weapon, modeled in the weapon's local space
-// so they track the weapon pose (a classic FPS viewmodel). gripL/gripR come from the weapon def.
-export function createViewmodelArms(gloveColor, sleeveColor, gripL, gripR) {
-  const g = new THREE.Group();
-  const skin = gloveColor ?? 0xd8a583;
-  const sleeve = sleeveColor ?? 0x6b7280;
-  const mkArm = (grip, side) => {
-    const arm = new THREE.Group();
-    // hand at the grip
-    const hand = box(0.1, 0.09, 0.12, skin);
-    hand.position.set(grip.x, grip.y, grip.z);
-    arm.add(hand);
-    // forearm angles back toward the camera (down/back and outward)
-    const fore = box(0.09, 0.09, 0.3, sleeve);
-    fore.position.set(grip.x + side * 0.05, grip.y - 0.07, grip.z + 0.2);
-    fore.rotation.set(-0.7, side * 0.2, side * 0.15);
-    arm.add(fore);
-    return arm;
-  };
-  g.add(mkArm(gripR, 1));   // trigger hand
-  g.add(mkArm(gripL, -1));  // support hand
-  g.traverse((o) => { o.castShadow = false; });
-  return g;
+  rig.armL.visible = true;
+  rig.armR.visible = true;
+  rig.vestMesh.visible = !!rig.vestMesh.userData.want;
+  if (rig.weaponMesh) rig.weaponMesh.visible = true;
 }
 
 export function setBackpack(rig, def) {
@@ -558,15 +533,21 @@ export function animateHumanoid(rig, dt, p) {
     }
   }
 
-  // weapon poses override arms — bent elbows give a proper tactical hold
+  // weapon poses override arms — bent elbows give a proper tactical hold.
+  // aimPitch tilts the whole hold up/down with the look direction so the barrel tracks the aim.
+  const aimPitch = THREE.MathUtils.clamp(p.camPitch || 0, -0.7, 0.9);
   if (rig.gunPose && !p.zombie && !p.swimming && p.stance !== 'prone' && p.climbing == null) {
     if (p.aiming) {
-      armRX = 1.05; armRZ = -0.12; elbR = 0.5;
-      armLX = 0.85; armLZ = 0.42; elbL = 0.85;
+      // shouldered: weapon raised to eye line, both hands on it, tilts with aimPitch
+      armRX = 1.28 - aimPitch; armRZ = -0.16; elbR = 0.58;
+      armLX = 1.08 - aimPitch; armLZ = 0.52; elbL = 0.72;
+      torsoLean += 0.14;
     } else {
-      armRX = 0.55; armRZ = -0.1; elbR = 0.75;   // low ready
-      armLX = 0.45; armLZ = 0.4; elbL = 1.0;
-      if (moving && speed > 4) { armRX = 0.3; armLX = 0.25; elbR = 0.6; elbL = 0.85; }
+      // high ready: weapon up across the chest (visible in first person, natural in third)
+      armRX = 1.0 - aimPitch * 0.6; armRZ = -0.14; elbR = 0.7;
+      armLX = 0.85 - aimPitch * 0.6; armLZ = 0.5; elbL = 0.8;
+      torsoLean += 0.08;
+      if (moving && speed > 4) { armRX = 0.5; armLX = 0.42; elbR = 0.7; elbL = 0.95; } // lower when sprinting
     }
   } else if (rig.gunPose && p.stance === 'prone') {
     armRX = 2.3; armLX = 2.2; armLZ = 0.3;
