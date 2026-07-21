@@ -1,4 +1,5 @@
 // ================= HUD: degrading stat icons, status effects, quickslots, weapon info =================
+import { ITEMS } from './items.js';
 
 const SVG = {
   bleed: '<svg viewBox="0 0 24 24"><path d="M12 2s7 8.1 7 13a7 7 0 0 1-14 0c0-4.9 7-13 7-13z"/></svg>',
@@ -40,6 +41,26 @@ export class HUD {
     this.compassCheck = 0;
     this.hasCompass = false;
     this.buildCompass();
+    this.drawScopeReticle();
+  }
+
+  // crisp mil-dot reticle for magnified scopes (drawn once)
+  drawScopeReticle() {
+    const c = document.getElementById('scope-reticle');
+    if (!c) return;
+    const x = c.getContext('2d'), s = c.width, h = s / 2;
+    x.clearRect(0, 0, s, s);
+    x.strokeStyle = 'rgba(10,12,10,0.95)'; x.fillStyle = 'rgba(10,12,10,0.95)';
+    x.lineWidth = s * 0.004;
+    x.beginPath(); x.moveTo(0, h); x.lineTo(s, h); x.moveTo(h, 0); x.lineTo(h, s); x.stroke();
+    x.lineWidth = s * 0.02; const post = s * 0.32;
+    x.beginPath();
+    x.moveTo(0, h); x.lineTo(post, h); x.moveTo(s, h); x.lineTo(s - post, h);
+    x.moveTo(h, s); x.lineTo(h, s - post); x.moveTo(h, 0); x.lineTo(h, post); x.stroke();
+    const step = s * 0.05, dot = s * 0.0075;
+    for (let i = 1; i <= 4; i++) for (const [dx, dy] of [[i, 0], [-i, 0], [0, i], [0, -i]]) {
+      x.beginPath(); x.arc(h + dx * step, h + dy * step, dot, 0, Math.PI * 2); x.fill();
+    }
   }
 
   // ---------- compass ----------
@@ -157,6 +178,10 @@ export class HUD {
     const w = p.weapon;
     const scoped = !!(w && w.def.cat === 'weapon' && p.weaponScoped(w) && this.G.controls.aim);
     this.el.scope.classList.toggle('on', scoped);
+    // functional in-mesh scopes (AX50) render live glass + mil-dot; hide the flat cross overlay
+    const opticId = w && w.attachments?.optic;
+    const meshScope = scoped && opticId && ITEMS[opticId]?.scopeMesh;
+    this.el.scope.classList.toggle('mildot', !!meshScope);
     this.el.crosshair.classList.toggle('hide', scoped || !w || w.def.cat !== 'weapon');
 
     this.renderQuickslots();

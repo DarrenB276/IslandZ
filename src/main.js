@@ -61,6 +61,36 @@ G.settings = new Settings(G);
 // auto-disable post FX if the device can't keep up
 let fpsAcc = 0, fpsN = 0, fpsGraceT = 0;
 
+// ================= functional scope: render the world onto the scope's ocular glass =========
+const scopeCam = new THREE.PerspectiveCamera(3, 1, 0.3, 700);
+const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
+function renderScope() {
+  // pick whichever held weapon mesh currently carries a scope render-target
+  const wm = (G.view === 'fpp' && vmMesh && vmMesh.userData.scope) ? vmMesh
+    : (G.player.rig.weaponMesh && G.player.rig.weaponMesh.userData.scope) ? G.player.rig.weaponMesh : null;
+  if (!wm) return;
+  const sc = wm.userData.scope;
+  wm.updateWorldMatrix(true, true);
+  sc.ocular.getWorldPosition(_sp);
+  wm.getWorldDirection(_sf);                 // +Z world axis of the weapon
+  _sf.negate();                              // barrel points -Z → forward
+  scopeCam.position.copy(_sp).addScaledVector(_sf, 0.35);
+  scopeCam.lookAt(_sp.clone().addScaledVector(_sf, 100));
+  const aiming = G.controls.aim;
+  const zoom = aiming ? 2.4 : 6;             // magnify hard when actually aiming
+  scopeCam.fov = zoom; scopeCam.updateProjectionMatrix();
+  // don't let the scope see the weapon/arms
+  const vmVis = viewmodel.visible, rigVis = G.player.rig.group.visible;
+  viewmodel.visible = false; G.player.rig.group.visible = false;
+  sc.ocular.visible = false; sc.reticle.visible = false;
+  renderer.setRenderTarget(sc.rt);
+  renderer.clear();
+  renderer.render(scene, scopeCam);
+  renderer.setRenderTarget(null);
+  sc.ocular.visible = true; sc.reticle.visible = true;
+  viewmodel.visible = vmVis; G.player.rig.group.visible = rigVis;
+}
+
 // ================= first-person viewmodel (camera-attached, always aims where you look) =========
 const viewmodel = new THREE.Group();
 camera.add(viewmodel);
@@ -409,6 +439,7 @@ function loop() {
     camera.lookAt(0, 2, 0);
     G.world.update(dt, elapsed, camera.position, camera.position);
   }
+  if (started) renderScope();   // update the scope's live glass before the main render
   if (postEnabled) composer.render();
   else renderer.render(scene, camera);
 }

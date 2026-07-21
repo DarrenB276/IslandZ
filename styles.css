@@ -36,6 +36,10 @@ svg { fill: currentColor; }
 #scope-overlay.on { display: block; }
 .scope-ring { position: absolute; inset: 0;
   background: radial-gradient(circle at center, transparent 0 34vmin, rgba(0,0,0,0.97) 35vmin); }
+#scope-reticle { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: 68vmin; height: 68vmin; display: none; }
+#scope-overlay.mildot .scope-cross-h, #scope-overlay.mildot .scope-cross-v { display: none; }
+#scope-overlay.mildot #scope-reticle { display: block; }
 .scope-cross-h, .scope-cross-v { position: absolute; background: rgba(0,0,0,0.85); }
 .scope-cross-h { left: 50%; top: 0; width: 1.5px; height: 100%; transform: translateX(-50%); }
 .scope-cross-v { top: 50%; left: 0; height: 1.5px; width: 100%; transform: translateY(-50%); }
