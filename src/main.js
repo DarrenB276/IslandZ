@@ -87,7 +87,7 @@ G.onWeaponVisualChanged = () => { viewmodelSig = '~'; };
 
 // per-weapon viewmodel fit so long guns (M249, VS98) don't fill the screen. [hipY, hipZ, adsZ]
 const VM_FIT = {
-  m249: { s: 0.82, z: -0.62 }, vs98: { s: 0.85, z: -0.6 }, remington: { s: 0.9, z: -0.5 },
+  m249: { s: 0.82, z: -0.62 }, ax50: { s: 0.72, z: -0.66 }, remington: { s: 0.9, z: -0.5 },
   vaiga: { s: 0.9, z: -0.5 }, akm: { s: 0.95, z: -0.48 }, m4a1: { s: 0.95, z: -0.46 }, mp5: { s: 1.0, z: -0.4 },
 };
 

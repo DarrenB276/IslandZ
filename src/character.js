@@ -1,5 +1,6 @@
 // ================= Low-poly humanoid rig + procedural animation =================
 import * as THREE from 'three';
+import { createAX50 } from './ax50.js';
 
 const MAT = (color) => new THREE.MeshLambertMaterial({ color });
 
@@ -250,6 +251,7 @@ export function attachWeapon(rig, mesh, isGun) {
 
 // ================= weapon meshes =================
 export function createWeaponMesh(id, attachments) {
+  if (id === 'ax50') return createAX50(attachments || {});   // modular AX50 with real parts
   const g = new THREE.Group();
   const add = (w, h, d, color, x, y, z) => {
     const m = box(w, h, d, color);
@@ -273,7 +275,7 @@ export function createWeaponMesh(id, attachments) {
       add(0.05, 0.14, 0.06, dark, 0, -0.09, -0.02);
       add(0.04, 0.04, 0.2, dark, 0, 0.06, -0.15);        // rail/sight
       break;
-    case 'vs98':
+    case 'vs98': // legacy fallback (AX50 handled above)
       add(0.055, 0.07, 0.8, wood, 0, 0, -0.05);
       add(0.04, 0.04, 0.4, metal, 0, 0.01, -0.62);
       add(0.07, 0.09, 0.24, wood, 0, -0.02, 0.34);
@@ -392,7 +394,7 @@ export function createWeaponMesh(id, attachments) {
     const bb = new THREE.Box3().setFromObject(g);
     g.userData.muzzleLocal = new THREE.Vector3(0, (bb.min.y + bb.max.y) / 2 + 0.02, bb.min.z + 0.02);
     g.userData.gripR = new THREE.Vector3(0, -0.055, 0.05);                    // trigger hand
-    const foreZ = id === 'vs98' ? -0.32 : id === 'm249' ? -0.34 : -0.26;
+    const foreZ = id === 'm249' ? -0.34 : -0.26;
     g.userData.gripL = new THREE.Vector3(0, -0.05, foreZ);                    // support hand
     if (!g.userData.aimLocal) g.userData.aimLocal = new THREE.Vector3(0, 0.06, -0.05); // iron sights
   }
@@ -422,7 +424,7 @@ function makeReticle(color, kind) {
 }
 
 function isGunId(id) {
-  return ['akm', 'm4a1', 'vs98', 'remington', 'vaiga', 'mp5', 'm249'].includes(id);
+  return ['akm', 'm4a1', 'ax50', 'remington', 'vaiga', 'mp5', 'm249'].includes(id);
 }
 
 // ================= procedural animation =================

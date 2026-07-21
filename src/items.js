@@ -15,9 +15,10 @@ def({ id: 'akm', name: 'AKM', icon: '𝗔𝗞', w: 5, h: 2, cat: 'weapon', long:
 def({ id: 'm4a1', name: 'M4A1', icon: '𝗠𝟰', w: 5, h: 2, cat: 'weapon', long: true,
   ammo: 'ammo_556', mag: 30, dmg: 32, rpm: 720, auto: true, spread: 0.016, zoom: 50, noise: 85,
   desc: '5.56 carbine. Fast and stable.' });
-def({ id: 'vs98', name: 'VS98 Sniper', icon: '𝗩𝗦', w: 6, h: 2, cat: 'weapon', long: true, scoped: true,
-  ammo: 'ammo_762x54', mag: 10, dmg: 88, rpm: 75, auto: false, spread: 0.002, zoom: 12, noise: 130,
-  desc: '7.62x54 marksman rifle with scope.' });
+def({ id: 'ax50', name: 'AX50', icon: '𝗔𝗫', w: 6, h: 2, cat: 'weapon', long: true,
+  ammo: 'ammo_762x54', mag: 5, dmg: 110, rpm: 45, auto: false, spread: 0.0016, zoom: 40, ironZoom: 34,
+  noise: 150, needsMag: true, magItem: 'ax50_mag',
+  desc: '.50 bolt-action rifle. Modular: attach a scope, mag and bipod. Iron sights when no scope.' });
 def({ id: 'remington', name: 'Remington 870', icon: '𝗥𝗠', w: 5, h: 2, cat: 'weapon', long: true,
   ammo: 'ammo_12ga', mag: 7, dmg: 13, pellets: 8, rpm: 55, auto: false, spread: 0.05, zoom: 55, noise: 100,
   desc: 'Pump-action 12ga shotgun.' });
@@ -38,9 +39,9 @@ def({ id: 'optic_rds', name: 'RDS Sight', icon: '🔴', w: 1, h: 1, cat: 'attach
 def({ id: 'optic_acog', name: 'ACOG 4x', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
   zoom: 22, scoped: true, desc: '4x combat optic.' });
 def({ id: 'optic_pso1', name: 'PSO-1 Scope', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
-  zoom: 16, scoped: true, fits: ['akm', 'vs98'], desc: 'Soviet side-rail scope. AKM / VS98 only.' });
+  zoom: 16, scoped: true, fits: ['akm'], desc: 'Soviet side-rail scope. AKM only.' });
 def({ id: 'optic_hunting', name: 'Hunting Scope 12x', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
-  zoom: 7, scoped: true, fits: ['vs98', 'remington', 'akm', 'm4a1'], desc: 'Long-range 12x glass.' });
+  zoom: 7, scoped: true, fits: ['remington', 'akm', 'm4a1'], desc: 'Long-range 12x glass.' });
 def({ id: 'grip_foregrip', name: 'Foregrip', icon: '🤚', w: 1, h: 1, cat: 'attachment', atype: 'under',
   spreadMul: 0.75, desc: 'Vertical grip. Tighter spread, less recoil.' });
 def({ id: 'under_flashlight', name: 'Tac Flashlight', icon: '🔦', w: 1, h: 1, cat: 'attachment', atype: 'under',
@@ -49,11 +50,18 @@ def({ id: 'under_laser', name: 'Laser Sight', icon: '📍', w: 1, h: 1, cat: 'at
   hipSpreadMul: 0.65, light: 'laser', desc: 'Visible laser. Much tighter hip fire.' });
 def({ id: 'mag_ext', name: 'Extended Mag', icon: '🧲', w: 1, h: 2, cat: 'attachment', atype: 'mag',
   magMul: 1.6, fits: ['akm', 'm4a1', 'mp5', 'vaiga'], desc: '+60% magazine capacity.' });
+// ---------- AX50 modular parts (separate items you assemble onto the rifle) ----------
+def({ id: 'ax50_scope', name: 'AX50 Scope 25×', icon: '🔭', w: 2, h: 1, cat: 'attachment', atype: 'optic',
+  scoped: true, scopeMesh: true, zoom: 4.2, fits: ['ax50'], desc: '5–25×56 scope with a live mil-dot reticle.' });
+def({ id: 'ax50_mag', name: 'AX50 Magazine', icon: '🔲', w: 1, h: 2, cat: 'attachment', atype: 'mag',
+  magSet: 5, fits: ['ax50'], desc: '5-round .50 magazine. Required to load the AX50.' });
+def({ id: 'ax50_bipod', name: 'AX50 Bipod', icon: '🦿', w: 2, h: 1, cat: 'attachment', atype: 'under',
+  spreadMul: 0.5, proneOnly: true, fits: ['ax50'], desc: 'Folding bipod. Very steady when prone.' });
 def({ id: 'mag_drum', name: 'Drum Magazine', icon: '⭕', w: 2, h: 2, cat: 'attachment', atype: 'mag',
   magMul: 2.5, fits: ['akm', 'm4a1', 'mp5'], desc: 'x2.5 magazine capacity.' });
 // suppressors (muzzle slot): cut noise + hide muzzle flash
 def({ id: 'sup_rifle', name: 'Rifle Suppressor', icon: '🥫', w: 1, h: 2, cat: 'attachment', atype: 'muzzle',
-  noiseMul: 0.35, fits: ['akm', 'm4a1', 'm249', 'vs98'], desc: 'Muffles rifle report; hides flash.' });
+  noiseMul: 0.35, fits: ['akm', 'm4a1', 'm249'], desc: 'Muffles rifle report; hides flash.' });
 def({ id: 'sup_pistol', name: 'Pistol Suppressor', icon: '🥫', w: 1, h: 1, cat: 'attachment', atype: 'muzzle',
   noiseMul: 0.3, fits: ['mp5'], desc: 'Muffles 9mm report; hides flash.' });
 
@@ -159,8 +167,8 @@ export function makeItem(id, qty) {
   if (d.stack) inst.qty = qty ?? d.stack;
   if (d.uses) inst.usesLeft = d.uses;
   if (d.cat === 'weapon') {
-    inst.loaded = qty ?? Math.floor(d.mag * (0.3 + Math.random() * 0.7));
     inst.attachments = { optic: null, under: null, mag: null, muzzle: null };
+    inst.loaded = d.needsMag ? 0 : (qty ?? Math.floor(d.mag * (0.3 + Math.random() * 0.7)));
   }
   return inst;
 }
@@ -187,7 +195,8 @@ export const LOOT_TABLES = {
     ['courier_bag', 2], ['sneakers', 4], ['boots', 3], ['rubber_boots', 2],
   ]),
   military: T([
-    ['akm', 4], ['m4a1', 4], ['vs98', 2], ['vaiga', 3], ['mp5', 3], ['m249', 1],
+    ['akm', 4], ['m4a1', 4], ['ax50', 2], ['ax50_scope', 2], ['ax50_mag', 3], ['ax50_bipod', 2],
+    ['vaiga', 3], ['mp5', 3], ['m249', 1],
     ['optic_rds', 3], ['optic_acog', 2], ['optic_pso1', 2], ['grip_foregrip', 3],
     ['under_flashlight', 2], ['under_laser', 2], ['mag_ext', 2], ['mag_drum', 1],
     ['sup_rifle', 2], ['sup_pistol', 2], ['map', 2], ['combat_boots', 3],
@@ -198,7 +207,7 @@ export const LOOT_TABLES = {
     ['mountain_pack', 2],
   ]),
   hunting: T([
-    ['remington', 4], ['vs98', 2], ['ammo_12ga', 8], ['ammo_762x54', 5], ['hunter_pants', 4],
+    ['remington', 4], ['ax50', 1], ['ax50_scope', 1], ['ax50_mag', 2], ['ammo_12ga', 8], ['ammo_762x54', 5], ['hunter_pants', 4],
     ['optic_hunting', 3], ['map', 2], ['compass', 2],
     ['boonie', 3], ['machete', 3], ['combat_knife', 2], ['canteen', 3], ['rice', 3], ['matches', 4],
     ['rope', 3], ['field_jacket', 2], ['moto_helmet', 1], ['courier_bag', 2], ['boots', 3],

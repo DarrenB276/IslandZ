@@ -89,7 +89,7 @@ function selectItem(id) {
   frameModel();
 }
 function isGun(id) {
-  return ['akm', 'm4a1', 'vs98', 'remington', 'vaiga', 'mp5', 'm249'].includes(id);
+  return ['akm', 'm4a1', 'ax50', 'remington', 'vaiga', 'mp5', 'm249'].includes(id);
 }
 
 // ================= parts =================

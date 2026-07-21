@@ -152,11 +152,15 @@ export class Player {
   // ---- attachment-aware weapon stats ----
   weaponMag(w) {
     const magId = w.attachments?.mag;
-    return Math.round(w.def.mag * (magId ? ITEMS[magId].magMul : 1));
+    const magDef = magId ? ITEMS[magId] : null;
+    if (w.def.needsMag) return magDef?.magSet ?? 0;   // AX50: no capacity without its magazine
+    if (magDef?.magSet) return magDef.magSet;
+    return Math.round(w.def.mag * (magDef?.magMul ?? 1));
   }
   weaponZoom(w) {
     const o = w.attachments?.optic;
-    return o ? ITEMS[o].zoom : w.def.zoom;
+    if (o) return ITEMS[o].zoom;
+    return w.def.ironZoom ?? w.def.zoom;               // iron-sight zoom when no optic
   }
   weaponScoped(w) {
     const o = w.attachments?.optic;
@@ -299,6 +303,7 @@ export class Player {
     if (this.fireCooldown > 0) return;
     if (!w.def.auto && this.triggerHeld) return;   // semi: need release
     this.triggerHeld = true;
+    if (this.weaponMag(w) <= 0) { SFX.dryFire(); this.fireCooldown = 0.4; this.G.hud.toast('No magazine'); return; }
     if ((w.loaded ?? 0) <= 0) { SFX.dryFire(); this.fireCooldown = 0.3; return; }
     w.loaded--;
     this.fireCooldown = 60 / w.def.rpm;

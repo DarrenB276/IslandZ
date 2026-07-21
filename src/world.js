@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { rollLoot, makeItem } from './items.js';
 import { itemMesh } from './models.js';
+import { createWeaponMesh } from './character.js';
 
 const SIZE = 880;          // 4 chunks (2x2) — quadruple the play area
 const ISLAND_R = 360;      // island radius: beyond this the ground dives underwater
@@ -566,11 +567,26 @@ export class World {
     const y = this.groundHeightSimple(x, z);
     const g = new THREE.Group();
     const mesh = itemMesh(inst.def.id);        // real 3D model if the item has one
+    const isGunItem = inst.def.cat === 'weapon' || inst.def.cat === 'melee';
     if (mesh) {
       mesh.position.y = 0.16;
       mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       g.add(mesh);
       g.userData.model = mesh;
+    } else if (isGunItem) {
+      // lay the weapon flat on the ground (DayZ-style — it sits firmly)
+      const wm = createWeaponMesh(inst.def.id, inst.attachments || {});
+      const bb = new THREE.Box3().setFromObject(wm);
+      const size = bb.getSize(new THREE.Vector3());
+      const s = Math.min(1, 0.9 / (size.z || 1));       // keep long guns reasonable
+      const holder = new THREE.Group();
+      holder.rotation.set(Math.PI / 2, 0, Math.PI / 2); // barrel (-Z) → lie along +X, flat
+      wm.scale.setScalar(s);
+      wm.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      holder.add(wm);
+      holder.position.y = 0.05;
+      g.add(holder);
+      g.userData.model = holder;
     } else {
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.34),
         new THREE.MeshLambertMaterial({ color: CAT_COLORS[inst.def.cat] ?? 0x777777 }));
@@ -583,7 +599,7 @@ export class World {
     }
     g.position.set(x, y, z);
     this.scene.add(g);
-    const gi = { inst, mesh: g, x, z, y, bob: Math.random() * 6, hasModel: !!mesh };
+    const gi = { inst, mesh: g, x, z, y, bob: Math.random() * 6, hasModel: !!mesh || isGunItem };
     this.groundItems.push(gi);
     return gi;
   }
@@ -727,9 +743,10 @@ export class World {
     }
     // item bobbing (only near player to save cycles)
     for (const gi of this.groundItems) {
+      const isGunItem = gi.inst.def.cat === 'weapon' || gi.inst.def.cat === 'melee';
       if (Math.abs(gi.x - playerPos.x) < 30 && Math.abs(gi.z - playerPos.z) < 30) {
         if (!gi.hasModel) gi.mesh.children[1].position.y = 0.45 + Math.sin(t * 2 + gi.bob) * 0.05;
-        gi.mesh.rotation.y = t * 0.5 + gi.bob;
+        if (!isGunItem) gi.mesh.rotation.y = t * 0.5 + gi.bob;   // weapons sit firmly, no spin
       }
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
