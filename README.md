@@ -1,6 +1,7 @@
 # IslandZ
 
-A high-quality **low-poly, mobile-first DayZ-style survival game** built with [Three.js](https://threejs.org). No build step, no external assets — everything (models, animation, sound) is generated procedurally at runtime.
+A high-quality **low-poly, mobile-first DayZ-style survival game** built with [Three.js](https://threejs.org). No build step, no external assets — everything (models, animation, sound) is generated procedurally at runtime. made using Claude Code (Testing their new version of Opus model)
+made this out of nowhere tbh.....
 
 ![genre](https://img.shields.io/badge/genre-survival-6a8a3a) ![engine](https://img.shields.io/badge/engine-three.js-049EF4) ![platform](https://img.shields.io/badge/platform-mobile%20%2B%20desktop-555)
 
