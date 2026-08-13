@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IslandZ — Model Editor</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠</text></svg>">
+<link rel="stylesheet" href="editor.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <!-- top bar -->
+  <header id="topbar">
+    <span class="brand">ISLAND<span>Z</span> · Model Editor</span>
+    <div class="spacer"></div>
+    <div class="gizmo-modes">
+      <button data-mode="translate" class="on">Move</button>
+      <button data-mode="rotate">Rotate</button>
+      <button data-mode="scale">Scale</button>
+    </div>
+    <div class="exports">
+      <button id="imp-json">Import JSON</button>
+      <button id="exp-json" title="Native game model (loads back into IslandZ)">Export JSON</button>
+      <button id="exp-glb">Export GLB</button>
+      <button id="exp-obj">Export OBJ</button>
+      <input type="file" id="imp-file" accept=".json" hidden>
+    </div>
+  </header>
+
+  <!-- left: item library -->
+  <aside id="library">
+    <div class="panel-title">ITEMS <span id="item-count"></span></div>
+    <input id="item-search" placeholder="Search items…">
+    <div id="item-list"></div>
+  </aside>
+
+  <!-- center: viewport -->
+  <main id="viewport">
+    <canvas id="view"></canvas>
+    <div id="vp-info"></div>
+    <div id="vp-hint">Drag to orbit · scroll to zoom · click a part to select</div>
+  </main>
+
+  <!-- right: inspector -->
+  <aside id="inspector">
+    <div class="panel-title">MODEL: <span id="model-name">—</span></div>
+    <div class="row btns">
+      <button id="load-game">Load game model</button>
+      <button id="clear-model">Clear</button>
+    </div>
+
+    <div class="panel-title">PARTS</div>
+    <div class="row btns">
+      <button id="add-box">+ Box</button>
+      <button id="add-cyl">+ Cylinder</button>
+      <button id="dup-part">Duplicate</button>
+      <button id="del-part" class="danger">Delete</button>
+    </div>
+    <div id="part-list"></div>
+
+    <div id="part-props" class="hidden">
+      <div class="panel-title">SELECTED PART</div>
+      <div class="prop-grid" id="prop-grid"></div>
+      <div class="panel-title">COLOR</div>
+      <div id="palette"></div>
+      <input type="color" id="color-picker">
+    </div>
+
+    <div class="panel-title">WEAPON POINTS <span class="sub">(muzzle / grips / sight / attach)</span></div>
+    <div class="row btns">
+      <button id="add-point">+ Point</button>
+    </div>
+    <div id="point-list"></div>
+  </aside>
+</div>
+<script type="module" src="src/editor/editor.js"></script>
+</body>
+</html>
